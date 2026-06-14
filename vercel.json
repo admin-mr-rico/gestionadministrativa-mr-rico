@@ -1,8 +1,21 @@
 {
   "buildCommand": "echo 'Static site - no build needed'",
   "installCommand": "echo 'No installation needed'",
+  "outputDirectory": "./",
   "public": "./",
   "routes": [
+    {
+      "src": "/css/(.*)",
+      "dest": "/css/$1"
+    },
+    {
+      "src": "/js/(.*)",
+      "dest": "/js/$1"
+    },
+    {
+      "src": "/assets/(.*)",
+      "dest": "/assets/$1"
+    },
     {
       "src": "/(.*)",
       "dest": "/index.html"
