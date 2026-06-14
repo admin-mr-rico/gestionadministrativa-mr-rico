@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mr Rico – Sistema de Gestión</title>
+  <link rel="stylesheet" href="./css/styles.css">
+
+</head>
+
+<body>
+
+  <!-- LOGIN -->
+  <div id="login-screen">
+    <div class="login-logo">
+      <div class="flame">🔥</div>
+      <h1>Mr Rico</h1>
+      <p>Sistema de Gestión</p>
+    </div>
+    <div class="login-card">
+      <h2>Selecciona tu rol e ingresa</h2>
+      <div class="role-grid">
+        <button class="role-btn active" data-role="mesero" onclick="selectRole(this)"><span
+            class="icon">🧑‍🍽️</span><span>Mesero</span></button>
+        <button class="role-btn" data-role="cocina" onclick="selectRole(this)"><span
+            class="icon">👨‍🍳</span><span>Cocina</span></button>
+        <button class="role-btn" data-role="admin" onclick="selectRole(this)"><span
+            class="icon">📊</span><span>Admin</span></button>
+      </div>
+      <div class="form-group"><label>USUARIO</label><input class="form-control" id="login-user" type="text"
+          placeholder="Tu usuario"></div>
+      <div class="form-group"><label>CONTRASEÑA</label><input class="form-control" id="login-pass" type="password"
+          placeholder="••••••••"></div>
+      <div class="error-msg" id="login-error">Usuario o contraseña incorrectos.</div>
+      <button class="btn-primary" onclick="doLogin()">Ingresar →</button>
+      <p style="text-align:center;font-size:11px;color:var(--gray-400);margin-top:16px;">Demo: admin/admin1234</p>
+    </div>
+  </div>
+
+  <!-- APP -->
+  <div id="app">
+    <header>
+      <div class="header-logo">🔥 Mr Rico <span id="header-role-label"></span></div>
+      <div class="header-right">
+        <span class="user-badge" id="header-user-badge">–</span>
+        <button class="btn-logout" onclick="doLogout()">Salir</button>
+      </div>
+    </header>
+
+    <main>
+
+      <!-- ══════════════════ MESERO ══════════════════ -->
+      <div class="screen" id="screen-mesero">
+        <!-- Pickup alert -->
+        <div id="pickup-section" style="display:none;"></div>
+
+        <div class="header-bar">
+          <div>
+            <div class="screen-title">Tomar Pedido 🧑‍🍽️</div>
+            <div class="screen-subtitle">Selecciona los platos y crea el pedido</div>
+          </div>
+          <div class="inline-flex">
+            <div class="search-bar" style="min-width:200px;"><input type="text" placeholder="Buscar plato..."
+                id="mesero-search" oninput="renderMenuCards()"></div>
+            <select class="form-control" id="mesero-cat" onchange="renderMenuCards()" style="width:150px;"></select>
+          </div>
+        </div>
+
+        <div class="grid-2" style="align-items:start;">
+          <div id="menu-cards-grid" class="menu-grid"></div>
+
+          <!-- ORDER PANEL -->
+          <div class="order-panel">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+              <strong style="font-size:16px;">🛒 Pedido Actual</strong>
+              <button class="btn-sm btn-delete" onclick="clearOrder()">Limpiar</button>
+            </div>
+
+            <div class="form-group" style="margin-bottom:10px;">
+              <label>MESA</label>
+              <div class="table-grid" id="table-btn-grid"></div>
+              <input type="hidden" id="order-table">
+            </div>
+
+            <div class="form-group" style="margin-bottom:10px;">
+              <label>NOTAS</label>
+              <textarea class="form-control" id="order-notes" rows="2" placeholder="Sin cebolla, alergia..."></textarea>
+            </div>
+
+            <div id="order-items-list">
+              <div class="empty-state" style="padding:20px 0;">
+                <div class="icon">🍽️</div>
+                <p>Sin platos</p><small>Selecciona del menú</small>
+              </div>
+            </div>
+
+            <div class="order-total" id="order-total-section" style="display:none;">
+              <span class="total-label">Total</span>
+              <span class="total-amount" id="order-total-amount">$0</span>
+            </div>
+
+            <button class="btn-send-order" onclick="sendOrder()">📤 Enviar a Cocina</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════ COCINA ══════════════════ -->
+      <div class="screen" id="screen-cocina">
+        <div class="header-bar">
+          <div>
+            <div class="screen-title">Órdenes de Cocina 👨‍🍳</div>
+            <div class="screen-subtitle">Gestiona los pedidos en tiempo real</div>
+          </div>
+          <div class="inline-flex">
+            <button class="btn-sm btn-edit" onclick="renderKitchen()" style="padding:8px 16px;">🔄 Actualizar</button>
+            <select class="form-control" id="kitchen-filter" onchange="renderKitchen()" style="width:150px;">
+              <option value="">Todos</option>
+              <option value="pending">Pendientes</option>
+              <option value="preparing">Preparando</option>
+              <option value="done">Listos</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:12px;margin-bottom:20px;">
+          <div class="stat-card" style="flex:1;">
+            <div class="stat-icon">⏳</div>
+            <div class="stat-value" id="k-pending">0</div>
+            <div class="stat-label">Pendientes</div>
+          </div>
+          <div class="stat-card" style="flex:1;">
+            <div class="stat-icon">🔥</div>
+            <div class="stat-value" id="k-preparing">0</div>
+            <div class="stat-label">Preparando</div>
+          </div>
+          <div class="stat-card" style="flex:1;">
+            <div class="stat-icon">✅</div>
+            <div class="stat-value" id="k-done">0</div>
+            <div class="stat-label">Listos</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:20px;">
+          <div class="card-title">📦 Inventario disponible</div>
+          <div class="card-sub">Insumos visibles para cocina</div>
+          <div id="kitchen-inventory"
+            style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;"></div>
+        </div>
+
+        <div class="kitchen-grid" id="kitchen-grid"></div>
+      </div>
+
+      <!-- ══════════════════ ADMIN ══════════════════ -->
+      <div class="screen" id="screen-admin">
+        <div class="screen-title">Administración 📊</div>
+        <div class="screen-subtitle">Panel completo del restaurante Mr Rico</div>
+
+        <div class="tab-bar">
+          <button class="tab active" onclick="adminTab('ventas',this)">📈 Ventas</button>
+          <button class="tab" onclick="adminTab('menu',this)">🍽️ Menú</button>
+          <button class="tab" onclick="adminTab('inventario',this)">📦 Inventario</button>
+          <button class="tab" onclick="adminTab('mesas',this)">🪑 Mesas</button>
+          <button class="tab" onclick="adminTab('personal',this)">👥 Personal</button>
+          <button class="tab" onclick="adminTab('usuarios',this)">🔑 Usuarios</button>
+          <button class="tab" onclick="adminTab('historial',this)">📋 Historial</button>
+        </div>
+
+        <div id="admin-tab-ventas">
+          <div class="grid-4" style="margin-bottom:20px;">
+            <div class="stat-card">
+              <div class="stat-icon">💰</div>
+              <div class="stat-value" id="a-total-sales">$0</div>
+              <div class="stat-label">Ventas Hoy</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">🧾</div>
+              <div class="stat-value" id="a-total-orders">0</div>
+              <div class="stat-label">Pedidos Hoy</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">🪑</div>
+              <div class="stat-value" id="a-total-tables">0</div>
+              <div class="stat-label">Mesas Totales</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">💳</div>
+              <div class="stat-value" id="a-pending-payments">0</div>
+              <div class="stat-label">Pagos Pendientes</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">🏆</div>
+              <div class="stat-value" id="a-top-dish">–</div>
+              <div class="stat-label">Más Vendido</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">📦</div>
+              <div class="stat-value" id="a-low-inventory">0</div>
+              <div class="stat-label">Insumos Bajos</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">🚫</div>
+              <div class="stat-value" id="a-out-dishes">0</div>
+              <div class="stat-label">Platos Agotados</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">📉</div>
+              <div class="stat-value" id="a-least-sold">–</div>
+              <div class="stat-label">Menos Vendido</div>
+            </div>
+          </div>
+          <div class="grid-2" style="margin-bottom:16px;">
+            <div class="card">
+              <div class="card-title">📦 Insumos bajos</div>
+              <div class="card-sub">Lista de insumos que necesitan reabastecimiento</div>
+              <div id="low-inv-list" style="margin-top:10px;color:var(--gray-600);"></div>
+            </div>
+            <div class="card">
+              <div class="card-title">🚫 Platos agotados / Menos vendidos</div>
+              <div class="card-sub">Platos sin stock y el menos vendido</div>
+              <div id="out-and-least" style="margin-top:10px;color:var(--gray-600);"></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">Pedidos de hoy</div>
+            <div class="card-sub">Con estado de pago</div>
+            <div style="overflow-x:auto;">
+              <table class="data-table" id="sales-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Mesa</th>
+                    <th>Mesero</th>
+                    <th>Platos</th>
+                    <th>Total</th>
+                    <th>Estado</th>
+                    <th>Pago</th>
+                    <th>Hora</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="sales-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="admin-tab-menu" style="display:none;">
+          <div class="header-bar">
+            <div class="inline-flex">
+              <div class="search-bar" style="min-width:200px;"><input type="text" placeholder="Buscar plato..."
+                  id="admin-search" oninput="renderAdminMenu()"></div>
+              <select class="form-control" id="admin-cat-filter" onchange="renderAdminMenu()"
+                style="width:160px;"></select>
+            </div>
+            <button class="btn-primary" style="width:auto;padding:10px 20px;" onclick="openMenuModal()">+ Agregar
+              Plato</button>
+          </div>
+          <div class="menu-grid" id="admin-menu-grid"></div>
+        </div>
+
+        <div id="admin-tab-inventario" style="display:none;">
+          <div class="header-bar">
+            <div><strong style="font-size:16px;">Gestión de Inventario</strong><br><small
+                style="color:var(--gray-400);">Los meseros y cocina pueden ver el stock en tiempo real</small></div>
+            <button class="btn-primary" style="width:auto;padding:10px 20px;" onclick="openInvModal()">+ Agregar
+              Insumo</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;" id="inv-grid">
+          </div>
+        </div>
+
+        <div id="admin-tab-mesas" style="display:none;">
+          <div class="header-bar">
+            <div><strong style="font-size:16px;">Gestión de Mesas</strong><br><small
+                style="color:var(--gray-400);">Agrega, edita o elimina mesas</small></div>
+            <button class="btn-primary" style="width:auto;padding:10px 20px;" onclick="openTableModal()">+ Agregar
+              Mesa</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;"
+            id="tables-grid"></div>
+        </div>
+
+        <div id="admin-tab-personal" style="display:none;">
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-title">📋 Registro de Actividad</div>
+              <div class="card-sub">Acciones recientes del personal</div>
+              <div id="personnel-log"></div>
+            </div>
+            <div>
+              <div class="card" style="margin-bottom:16px;">
+                <div class="card-title">🧑‍🍽️ Resumen Meseros</div>
+                <div class="card-sub">Pedidos tomados hoy</div>
+                <div id="waiter-stats"></div>
+              </div>
+              <div class="card">
+                <div class="card-title">👨‍🍳 Resumen Cocina</div>
+                <div class="card-sub">Platos preparados hoy</div>
+                <div id="kitchen-stats"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="admin-tab-usuarios" style="display:none;">
+          <div class="header-bar">
+            <div><strong style="font-size:16px;">Gestión de Usuarios</strong><br><small
+                style="color:var(--gray-400);">Administra el acceso del personal</small></div>
+            <button class="btn-primary" style="width:auto;padding:10px 20px;" onclick="openUserModal()">+ Agregar
+              Usuario</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;" id="users-grid">
+          </div>
+        </div>
+
+        <div id="admin-tab-historial" style="display:none;">
+          <div class="card">
+            <div class="card-title">Historial Completo</div>
+            <div class="card-sub">Todos los pedidos registrados</div>
+            <div style="overflow-x:auto;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Mesa</th>
+                    <th>Mesero</th>
+                    <th>Detalle</th>
+                    <th>Notas</th>
+                    <th>Total</th>
+                    <th>Cocina</th>
+                    <th>Pago</th>
+                    <th>Hora</th>
+                  </tr>
+                </thead>
+                <tbody id="history-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /screen-admin -->
+    </main>
+  </div>
+
+  <!-- ══ MODAL PLATO ══ -->
+  <div class="modal-overlay" id="menu-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title" id="menu-modal-title">Agregar Plato</div><button class="btn-close"
+          onclick="closeModal('menu-modal')">✕</button>
+      </div>
+      <input type="hidden" id="edit-dish-id">
+      <div class="form-group"><label>NOMBRE *</label><input class="form-control" id="dish-name"
+          placeholder="Ej: Bandeja Paisa"></div>
+      <div class="form-row">
+        <div class="form-group"><label>PRECIO *</label><input class="form-control" id="dish-price" type="number"
+            placeholder="0" min="0"></div>
+        <div class="form-group"><label>CANTIDAD EN STOCK *</label><input class="form-control" id="dish-qty"
+            type="number" placeholder="0" min="0"></div>
+      </div>
+      <div class="form-group"><label>CATEGORÍA</label><select class="form-control" id="dish-cat"></select></div>
+      <div class="form-group"><label>DESCRIPCIÓN</label><textarea class="form-control" id="dish-desc"
+          placeholder="Ingredientes, preparación..."></textarea></div>
+      <div class="form-group"><label>EMOJI</label><input class="form-control" id="dish-emoji" placeholder="🍲"
+          maxlength="4"></div>
+      <div class="form-group"><label>INSUMOS (Receta)</label>
+        <div id="dish-consumes-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px;"></div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn-sm btn-primary" type="button" onclick="addConsumeRow()">+ Agregar insumo</button>
+          <small style="align-self:center;color:var(--gray-400);">Mapea qué insumos consume este plato</small>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:6px;">
+        <button class="btn-primary" onclick="saveDish()">Guardar</button>
+        <button class="btn-secondary" onclick="closeModal('menu-modal')">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL INVENTARIO ══ -->
+  <div class="modal-overlay" id="inv-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title" id="inv-modal-title">Agregar Insumo</div><button class="btn-close"
+          onclick="closeModal('inv-modal')">✕</button>
+      </div>
+      <input type="hidden" id="edit-inv-id">
+      <div class="form-group"><label>NOMBRE *</label><input class="form-control" id="inv-name"
+          placeholder="Ej: Coca-Cola 250ml"></div>
+      <div class="form-row">
+        <div class="form-group"><label>CANTIDAD *</label><input class="form-control" id="inv-qty" type="number"
+            placeholder="0" min="0"></div>
+        <div class="form-group"><label>UNIDAD</label><input class="form-control" id="inv-unit"
+            placeholder="unidades, litros, kg..."></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>STOCK MÍNIMO</label><input class="form-control" id="inv-min" type="number"
+            placeholder="5" min="0"></div>
+        <div class="form-group"><label>CATEGORÍA</label><input class="form-control" id="inv-cat"
+            placeholder="Bebidas, Carnes..."></div>
+      </div>
+      <div class="form-group"><label>EMOJI</label><input class="form-control" id="inv-emoji" placeholder="🥤"
+          maxlength="4"></div>
+      <div style="display:flex;gap:10px;margin-top:6px;">
+        <button class="btn-primary" onclick="saveInv()">Guardar</button>
+        <button class="btn-secondary" onclick="closeModal('inv-modal')">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL MESA ══ -->
+  <div class="modal-overlay" id="table-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title" id="table-modal-title">Agregar Mesa</div><button class="btn-close"
+          onclick="closeModal('table-modal')">✕</button>
+      </div>
+      <input type="hidden" id="edit-table-id">
+      <div class="form-group"><label>NOMBRE DE MESA *</label><input class="form-control" id="table-name"
+          placeholder="Ej: Mesa 11, Terraza 1, Para llevar..."></div>
+      <div class="form-row">
+        <div class="form-group"><label>CAPACIDAD (personas)</label><input class="form-control" id="table-cap"
+            type="number" placeholder="4" min="1"></div>
+        <div class="form-group"><label>ZONA</label><input class="form-control" id="table-zone"
+            placeholder="Interior, Exterior..."></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:6px;">
+        <button class="btn-primary" onclick="saveTable()">Guardar</button>
+        <button class="btn-secondary" onclick="closeModal('table-modal')">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL USUARIO ══ -->
+  <div class="modal-overlay" id="user-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title" id="user-modal-title">Agregar Usuario</div><button class="btn-close"
+          onclick="closeModal('user-modal')">✕</button>
+      </div>
+      <input type="hidden" id="edit-user-id">
+      <div class="form-row">
+        <div class="form-group"><label>NOMBRE COMPLETO *</label><input class="form-control" id="user-name"
+            placeholder="Ej: Carlos López"></div>
+        <div class="form-group"><label>ROL *</label>
+          <select class="form-control" id="user-role">
+            <option value="mesero">🧑‍🍽️ Mesero</option>
+            <option value="cocina">👨‍🍳 Cocina</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>USUARIO *</label><input class="form-control" id="user-username"
+            placeholder="usuario123"></div>
+        <div class="form-group"><label>CONTRASEÑA *</label><input class="form-control" id="user-pass" type="password"
+            placeholder="••••••••"></div>
+      </div>
+      <div id="user-modal-error" class="error-msg">El usuario ya existe.</div>
+      <div style="display:flex;gap:10px;margin-top:6px;">
+        <button class="btn-primary" onclick="saveUser()">Guardar</button>
+        <button class="btn-secondary" onclick="closeModal('user-modal')">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL CATEGORÍAS ══ -->
+  <div class="modal-overlay" id="cat-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">Gestionar Categorías</div><button class="btn-close"
+          onclick="closeModal('cat-modal')">✕</button>
+      </div>
+      <div class="form-row" style="margin-bottom:14px;">
+        <input class="form-control" id="new-cat-input" placeholder="Nueva categoría...">
+        <button class="btn-primary" onclick="addCategory()">Agregar</button>
+      </div>
+      <div id="cat-list"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="./js/app.js" defer></script>
+</body>
+
+</html>

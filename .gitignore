@@ -1,0 +1,19 @@
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Editor
+.vscode/
+
+# Dist / build
+dist/
+build/
+
+# Temporary
+*.tmp

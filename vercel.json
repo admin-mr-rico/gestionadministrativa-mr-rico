@@ -1,0 +1,11 @@
+{
+  "buildCommand": "echo 'Static site - no build needed'",
+  "installCommand": "echo 'No installation needed'",
+  "public": "./",
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ]
+}
