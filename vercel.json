@@ -1,8 +1,8 @@
 {
-  "buildCommand": "echo 'Static site - no build needed'",
+  "buildCommand": "cd src && node generate-env.js",
   "installCommand": "echo 'No installation needed'",
-  "outputDirectory": "./",
-  "public": "./",
+  "outputDirectory": "src",
+  "public": "src",
   "routes": [
     {
       "src": "/css/(.*)",
