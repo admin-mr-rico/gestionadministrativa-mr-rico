@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS menu (
   price numeric NOT NULL,
   qty integer DEFAULT 0,
   cat text,
-  desc text,
+  "desc" text,
   emoji text,
   consumes jsonb
 );
