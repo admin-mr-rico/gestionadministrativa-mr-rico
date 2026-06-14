@@ -17,3 +17,6 @@ build/
 
 # Temporary
 *.tmp
+
+# Ignore working copy of original project folder
+src/
