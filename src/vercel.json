@@ -1,7 +1,7 @@
 {
   "buildCommand": "npm run build",
   "installCommand": "echo 'No installation needed'",
-  "public": "./",
+  "public": true,
   "routes": [
     {
       "src": "/(.*)",
