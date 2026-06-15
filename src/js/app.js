@@ -331,17 +331,19 @@ function renderOrderPanel() {
   totSec.style.display='flex';
 }
 
-function sendOrder() {
+async function sendOrder() {
   const tableName = document.getElementById('order-table').value;
   const notes = document.getElementById('order-notes').value.trim();
   if (!tableName) { showToast('⚠️ Selecciona una mesa', 'error'); return; }
   if (!state.currentOrder.length) { showToast('⚠️ El pedido está vacío', 'error'); return; }
+  
   const total = state.currentOrder.reduce((s,i)=>s+i.price*i.qty,0);
+  
   const order = {
     id: state.nextOrderId++,
-    table: tableName,
+    table_name: tableName, // Corregido para que coincida con tu columna SQL de Supabase
     waiter: state.currentUser.name,
-    waiterId: state.currentUser.id,
+    waiter_id: state.currentUser.id,
     notes,
     items: [...state.currentOrder],
     total,
@@ -349,23 +351,43 @@ function sendOrder() {
     payment: 'pending',
     delivered: false,
     time: new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}),
-    date: new Date().toLocaleDateString('es-CO')
+    date: new Date().toLocaleDateString('es-CO'),
+    inventoryUpdated: false
   };
+
+  state.orders.push(order);
+  
   state.currentOrder.forEach(oi => {
     const d = state.menu.find(x=>x.id===oi.id);
     if (d) d.qty = Math.max(0, d.qty - oi.qty);
   });
-  state.orders.push(order);
+
   state.currentOrder = [];
   state.selectedTable = null;
   document.getElementById('order-notes').value='';
   document.getElementById('order-table').value='';
+  
   renderTableBtns();
   renderOrderPanel();
   renderMenuCards();
-  renderTablesGrid();
-  logActivity(state.currentUser.name,'mesero',`Creó pedido #${order.id} – ${order.table} ($${order.total.toLocaleString()})`,'#FF6B1A');
-  showToast('✅ Pedido enviado a cocina!', 'success');
+
+  // Enviar directamente a la base de datos en la nube
+  if (supabaseClient) {
+    const { error } = await supabaseClient
+      .from('orders')
+      .insert([order]);
+
+    if (error) {
+      console.error("Error al guardar en Supabase:", error.message);
+      showToast('⚠️ Error al sincronizar pedido en la nube', 'error');
+    } else {
+      showToast('✅ ¡Pedido enviado a cocina en tiempo real!', 'success');
+      logActivity(state.currentUser.name,'mesero',`Creó pedido #${order.id} – ${order.table_name} ($${order.total.toLocaleString()})`,'#FF6B1A');
+    }
+  } else {
+    renderTablesGrid();
+    showToast('✅ Guardado localmente (Modo sin internet)', 'success');
+  }
 }
 
 // ═══════════════════════════════════════════
