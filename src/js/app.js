@@ -51,9 +51,9 @@ const state = {
 // ──────────────────────────────────────────────────
 let supabaseClient = null;
 
-// Leemos directamente las variables que Vercel inyecta en window.env
-const SUPABASE_URL = window.env?.SUPABASE_URL;
-const SUPABASE_ANON_KEY = window.env?.SUPABASE_ANON_KEY;
+// Leemos las variables directamente (de env.js o window.env en Vercel)
+const SUPABASE_URL = window.SUPABASE_URL || window.env?.SUPABASE_URL;
+const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || window.env?.SUPABASE_ANON_KEY;
 
 if (SUPABASE_URL && SUPABASE_ANON_KEY) {
   try {
@@ -65,62 +65,135 @@ if (SUPABASE_URL && SUPABASE_ANON_KEY) {
     console.warn('Error al inicializar Supabase:', e);
   }
 } else {
-  console.warn('Supabase no configurado en window.env. Revisa las variables en Vercel.');
+  console.warn('Supabase no configurado en window.SUPABASE_URL ni en window.env. Revisa las variables de entorno.');
 }
 
 async function initSupabase() {
   await loadInitialState();
-  // periodic sync (simple approach) to persist local changes; adjust interval as needed
-  if (supabaseClient) setInterval(() => { syncAll().catch(e=>console.error(e)); }, 5000);
 }
 
 async function loadInitialState() {
   if (!supabaseClient) return;
   try {
-    // menu
-    const { data: menuData } = await supabaseClient.from('menu').select('*');
-    if (menuData && menuData.length) {
-      state.menu = menuData.map(m => ({ ...m, price: Number(m.price) }));
-      state.nextMenuId = Math.max(...state.menu.map(x => x.id)) + 1;
-    }
-    // inventory
-    const { data: invData } = await supabaseClient.from('inventory').select('*');
-    if (invData && invData.length) { state.inventory = invData; state.nextInvId = Math.max(...state.inventory.map(x=>x.id))+1; }
-    // users
-    const { data: usersData } = await supabaseClient.from('users').select('*');
-    if (usersData && usersData.length) { state.users = usersData; state.nextUserId = Math.max(...state.users.map(x=>x.id))+1; }
-    // tables
-    const { data: tablesData } = await supabaseClient.from('tables').select('*');
-    if (tablesData && tablesData.length) { state.tables = tablesData; state.nextTableId = Math.max(...state.tables.map(x=>x.id))+1; }
-    // orders
-    const { data: ordersData } = await supabaseClient.from('orders').select('*');
-    if (ordersData && ordersData.length) {
-      state.orders = ordersData.map(o => ({ ...o, items: o.items || [], total: Number(o.total) }));
-      state.nextOrderId = state.orders.length ? Math.max(...state.orders.map(x=>x.id))+1 : state.nextOrderId;
-    }
-    // activity
-    const { data: actData } = await supabaseClient.from('activity_log').select('*');
-    if (actData && actData.length) state.activityLog = actData;
+    await loadMenu();
+    await loadInventory();
+    await loadUsers();
+    await loadTables();
+    await loadOrders();
+    await loadActivityLog();
+    await loadCategories();
 
-    // If remote is empty, push local defaults to DB
-    await syncAll();
+    // Hacemos sembrado inicial (seed) sólo de lo que falte en Supabase
+    await checkAndSeedDatabase();
   } catch (e) {
     console.error('Error loading initial state from Supabase', e);
   }
 }
 
-async function syncAll() {
+async function loadMenu() {
+  if (!supabaseClient) return;
+  const { data, error } = await supabaseClient.from('menu').select('*');
+  if (error) console.error("Error loading menu:", error);
+  else if (data) {
+    state.menu = data.map(m => ({ ...m, price: Number(m.price), qty: Number(m.qty) }));
+    state.nextMenuId = state.menu.length ? Math.max(...state.menu.map(x => x.id)) + 1 : 1;
+  }
+}
+
+async function loadInventory() {
+  if (!supabaseClient) return;
+  const { data, error } = await supabaseClient.from('inventory').select('*');
+  if (error) console.error("Error loading inventory:", error);
+  else if (data) {
+    state.inventory = data.map(i => ({ ...i, qty: Number(i.qty), min: Number(i.min) }));
+    state.nextInvId = state.inventory.length ? Math.max(...state.inventory.map(x => x.id)) + 1 : 1;
+  }
+}
+
+async function loadUsers() {
+  if (!supabaseClient) return;
+  const { data, error } = await supabaseClient.from('users').select('*');
+  if (error) console.error("Error loading users:", error);
+  else if (data) {
+    state.users = data;
+    state.nextUserId = state.users.length ? Math.max(...state.users.map(x => x.id)) + 1 : 1;
+  }
+}
+
+async function loadTables() {
+  if (!supabaseClient) return;
+  const { data, error } = await supabaseClient.from('tables').select('*');
+  if (error) console.error("Error loading tables:", error);
+  else if (data) {
+    state.tables = data.map(t => ({ ...t, cap: Number(t.cap) }));
+    state.nextTableId = state.tables.length ? Math.max(...state.tables.map(x => x.id)) + 1 : 1;
+  }
+}
+
+async function loadOrders() {
+  if (!supabaseClient) return;
+  const { data, error } = await supabaseClient.from('orders').select('*');
+  if (error) console.error("Error loading orders:", error);
+  else if (data) {
+    state.orders = data.map(o => ({
+      ...o,
+      table: o.table_name || o.table,
+      items: o.items || [],
+      total: Number(o.total)
+    }));
+    state.nextOrderId = state.orders.length ? Math.max(...state.orders.map(x => x.id)) + 1 : 1;
+  }
+}
+
+async function loadActivityLog() {
+  if (!supabaseClient) return;
+  // Traer los 100 más recientes
+  const { data, error } = await supabaseClient.from('activity_log').select('*').order('id', { ascending: false }).limit(100);
+  if (error) console.error("Error loading activity log:", error);
+  else if (data) {
+    state.activityLog = data;
+  }
+}
+
+async function loadCategories() {
+  if (!supabaseClient) return;
+  const { data, error } = await supabaseClient.from('categories').select('*').order('id', { ascending: true });
+  if (error) console.error("Error loading categories:", error);
+  else if (data && data.length) {
+    state.categories = data.map(c => c.name);
+  }
+}
+
+async function checkAndSeedDatabase() {
   if (!supabaseClient) return;
   try {
-    await supabaseClient.from('menu').upsert(state.menu);
-    await supabaseClient.from('inventory').upsert(state.inventory);
-    await supabaseClient.from('users').upsert(state.users);
-    await supabaseClient.from('tables').upsert(state.tables);
-    // orders and activity_log may contain JSON fields
-    await supabaseClient.from('orders').upsert(state.orders);
-    await supabaseClient.from('activity_log').upsert(state.activityLog);
+    // 1. Menu
+    const { data: remoteMenu } = await supabaseClient.from('menu').select('id');
+    if (remoteMenu && remoteMenu.length === 0 && state.menu.length > 0) {
+      await supabaseClient.from('menu').insert(state.menu);
+    }
+    // 2. Inventory
+    const { data: remoteInventory } = await supabaseClient.from('inventory').select('id');
+    if (remoteInventory && remoteInventory.length === 0 && state.inventory.length > 0) {
+      await supabaseClient.from('inventory').insert(state.inventory);
+    }
+    // 3. Users
+    const { data: remoteUsers } = await supabaseClient.from('users').select('id');
+    if (remoteUsers && remoteUsers.length === 0 && state.users.length > 0) {
+      await supabaseClient.from('users').insert(state.users);
+    }
+    // 4. Tables
+    const { data: remoteTables } = await supabaseClient.from('tables').select('id');
+    if (remoteTables && remoteTables.length === 0 && state.tables.length > 0) {
+      await supabaseClient.from('tables').insert(state.tables);
+    }
+    // 5. Categories
+    const { data: remoteCats } = await supabaseClient.from('categories').select('id');
+    if (remoteCats && remoteCats.length === 0 && state.categories.length > 0) {
+      await supabaseClient.from('categories').insert(state.categories.map(name => ({ name })));
+    }
   } catch (e) {
-    console.error('Sync error', e);
+    console.error("Error seeding database:", e);
   }
 }
 
@@ -219,7 +292,13 @@ function renderPickupAlerts() {
 
 function markDelivered(id) {
   const o = state.orders.find(x=>x.id===id);
-  if (o) { o.delivered=true; logActivity(state.currentUser.name,'mesero',`Entregó pedido #${o.id} (${o.table})`,'#28A745'); }
+  if (o) {
+    o.delivered=true;
+    logActivity(state.currentUser.name,'mesero',`Entregó pedido #${o.id} (${o.table})`,'#28A745');
+    if (supabaseClient) {
+      supabaseClient.from('orders').update({ delivered: true }).eq('id', id).catch(e => console.error(e));
+    }
+  }
   renderPickupAlerts();
   showToast(`✅ Pedido #${id} entregado`, 'success');
 }
@@ -341,6 +420,7 @@ async function sendOrder() {
   
   const order = {
     id: state.nextOrderId++,
+    table: tableName,
     table_name: tableName, // Corregido para que coincida con tu columna SQL de Supabase
     waiter: state.currentUser.name,
     waiter_id: state.currentUser.id,
@@ -383,6 +463,14 @@ async function sendOrder() {
     } else {
       showToast('✅ ¡Pedido enviado a cocina en tiempo real!', 'success');
       logActivity(state.currentUser.name,'mesero',`Creó pedido #${order.id} – ${order.table_name} ($${order.total.toLocaleString()})`,'#FF6B1A');
+      
+      // Actualizar el stock de los platos en Supabase de forma inmediata
+      order.items.forEach(oi => {
+        const d = state.menu.find(x => x.id === oi.id);
+        if (d) {
+          supabaseClient.from('menu').update({ qty: d.qty }).eq('id', d.id).catch(e => console.error("Error updating menu qty:", e));
+        }
+      });
     }
   } else {
     renderTablesGrid();
@@ -439,6 +527,15 @@ function setOrderStatus(id, status) {
   }
   renderKitchen();
   showToast(status==='done'?'✅ Pedido listo – mesero notificado':'🔥 Preparando pedido', 'success');
+
+  // Guardar en Supabase de forma inmediata
+  if (supabaseClient) {
+    supabaseClient
+      .from('orders')
+      .update({ status: status, inventoryUpdated: o.inventoryUpdated })
+      .eq('id', id)
+      .catch(e => console.error("Error al actualizar estado en Supabase:", e));
+  }
 }
 
 function updateInventoryForOrder(order) {
@@ -452,6 +549,9 @@ function updateInventoryForOrder(order) {
         if (inv) {
           inv.qty = Math.max(0, inv.qty - (c.qty || 1) * qty);
           logActivity('Sistema','inventario',`Consumió ${ (c.qty||1)*qty } ${inv.unit} de ${inv.name} por pedido #${order.id}`,'#6F42C1');
+          if (supabaseClient) {
+            supabaseClient.from('inventory').update({ qty: inv.qty }).eq('id', inv.id).catch(e => console.error(e));
+          }
         }
       });
     } else {
@@ -462,6 +562,9 @@ function updateInventoryForOrder(order) {
       if (inv) {
         inv.qty = Math.max(0, inv.qty - qty);
         logActivity('Sistema','inventario',`Consumió ${qty} ${inv.unit} de ${inv.name} por pedido #${order.id}`,'#6F42C1');
+        if (supabaseClient) {
+          supabaseClient.from('inventory').update({ qty: inv.qty }).eq('id', inv.id).catch(e => console.error(e));
+        }
       }
     }
   });
@@ -581,7 +684,13 @@ function renderAdminVentas() {
 
 function markPaid(id) {
   const o = state.orders.find(x=>x.id===id);
-  if (o) { o.payment='paid'; logActivity(state.currentUser.name,'admin',`Marcó pedido #${o.id} como PAGADO ($${o.total.toLocaleString()})`,'#28A745'); }
+  if (o) {
+    o.payment='paid';
+    logActivity(state.currentUser.name,'admin',`Marcó pedido #${o.id} como PAGADO ($${o.total.toLocaleString()})`,'#28A745');
+    if (supabaseClient) {
+      supabaseClient.from('orders').update({ payment: 'paid' }).eq('id', id).catch(e => console.error(e));
+    }
+  }
   renderAdminVentas();
   renderTablesGrid();
   showToast('💰 Pedido marcado como pagado', 'success');
@@ -680,10 +789,19 @@ function saveInv() {
   if (!name) { showToast('⚠️ El nombre es obligatorio', 'error'); return; }
   if (editId) {
     const inv=state.inventory.find(x=>x.id===editId);
-    if (inv) Object.assign(inv,{name,qty,unit,min,cat,emoji});
+    if (inv) {
+      Object.assign(inv,{name,qty,unit,min,cat,emoji});
+      if (supabaseClient) {
+        supabaseClient.from('inventory').upsert([inv]).catch(e => console.error(e));
+      }
+    }
     showToast('✅ Insumo actualizado','success');
   } else {
-    state.inventory.push({id:state.nextInvId++,name,qty,unit,min,cat,emoji});
+    const newInv = {id:state.nextInvId++,name,qty,unit,min,cat,emoji};
+    state.inventory.push(newInv);
+    if (supabaseClient) {
+      supabaseClient.from('inventory').insert([newInv]).catch(e => console.error(e));
+    }
     showToast('✅ Insumo agregado','success');
   }
   closeModal('inv-modal');
@@ -693,6 +811,9 @@ function saveInv() {
 function deleteInv(id) {
   if (!confirm('¿Eliminar este insumo?')) return;
   state.inventory=state.inventory.filter(x=>x.id!==id);
+  if (supabaseClient) {
+    supabaseClient.from('inventory').delete().eq('id', id).catch(e => console.error(e));
+  }
   renderInvGrid();
   showToast('🗑️ Eliminado','success');
 }
@@ -747,10 +868,19 @@ function saveTable() {
   if (!name) { showToast('⚠️ El nombre es obligatorio','error'); return; }
   if (editId) {
     const t=state.tables.find(x=>x.id===editId);
-    if (t) Object.assign(t,{name,cap,zone});
+    if (t) {
+      Object.assign(t,{name,cap,zone});
+      if (supabaseClient) {
+        supabaseClient.from('tables').upsert([t]).catch(e => console.error(e));
+      }
+    }
     showToast('✅ Mesa actualizada','success');
   } else {
-    state.tables.push({id:state.nextTableId++,name,cap,zone});
+    const newTable = {id:state.nextTableId++,name,cap,zone};
+    state.tables.push(newTable);
+    if (supabaseClient) {
+      supabaseClient.from('tables').insert([newTable]).catch(e => console.error(e));
+    }
     showToast('✅ Mesa agregada','success');
   }
   closeModal('table-modal');
@@ -760,6 +890,9 @@ function saveTable() {
 function deleteTable(id) {
   if (!confirm('¿Eliminar esta mesa?')) return;
   state.tables=state.tables.filter(x=>x.id!==id);
+  if (supabaseClient) {
+    supabaseClient.from('tables').delete().eq('id', id).catch(e => console.error(e));
+  }
   renderTablesGrid();
   showToast('🗑️ Mesa eliminada','success');
 }
@@ -768,8 +901,12 @@ function deleteTable(id) {
 //  ADMIN – PERSONAL
 // ═══════════════════════════════════════════
 function logActivity(person, role, action, color) {
-  state.activityLog.unshift({ person, role, action, color, time: new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) });
+  const item = { person, role, action, color, time: new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) };
+  state.activityLog.unshift(item);
   if (state.activityLog.length > 100) state.activityLog.pop();
+  if (supabaseClient) {
+    supabaseClient.from('activity_log').insert([item]).catch(e => console.error("Error al registrar actividad en Supabase:", e));
+  }
 }
 
 function renderPersonnel() {
@@ -865,11 +1002,20 @@ function saveUser() {
 
   if (editId) {
     const u=state.users.find(x=>x.id===editId);
-    if (u) Object.assign(u,{name,role,username,pass});
+    if (u) {
+      Object.assign(u,{name,role,username,pass});
+      if (supabaseClient) {
+        supabaseClient.from('users').upsert([u]).catch(e => console.error(e));
+      }
+    }
     logActivity(state.currentUser.name,'admin',`Editó usuario @${username} (${role})`,'#6F42C1');
     showToast('✅ Usuario actualizado','success');
   } else {
-    state.users.push({id:state.nextUserId++,name,role,username,pass});
+    const newUser = {id:state.nextUserId++,name,role,username,pass};
+    state.users.push(newUser);
+    if (supabaseClient) {
+      supabaseClient.from('users').insert([newUser]).catch(e => console.error(e));
+    }
     logActivity(state.currentUser.name,'admin',`Creó usuario @${username} (${role})`,'#6F42C1');
     showToast('✅ Usuario creado','success');
   }
@@ -882,6 +1028,9 @@ function deleteUser(id) {
   if (!u) return;
   if (!confirm(`¿Eliminar usuario @${u.username}?`)) return;
   state.users=state.users.filter(x=>x.id!==id);
+  if (supabaseClient) {
+    supabaseClient.from('users').delete().eq('id', id).catch(e => console.error(e));
+  }
   logActivity(state.currentUser.name,'admin',`Eliminó usuario @${u.username}`,'#DC3545');
   renderUsersGrid();
   showToast('🗑️ Usuario eliminado','success');
@@ -930,6 +1079,7 @@ function saveCategoryEdit(i) {
   const val = document.getElementById('edit-cat-input').value.trim();
   if (!val) { showToast('⚠️ La categoría no puede quedar vacía','error'); return; }
   if (state.categories.includes(val) && state.categories[i] !== val) { showToast('Ya existe esa categoría','error'); return; }
+  const oldVal = state.categories[i];
   state.categories[i] = val;
   state.editingCategoryIndex = null;
   renderCatList();
@@ -937,6 +1087,10 @@ function saveCategoryEdit(i) {
   renderDishCatSelect();
   renderAdminMenu();
   showToast('✅ Categoría actualizada','success');
+
+  if (supabaseClient) {
+    supabaseClient.from('categories').update({ name: val }).eq('name', oldVal).catch(e => console.error(e));
+  }
 }
 
 function addCategory() {
@@ -949,15 +1103,24 @@ function addCategory() {
   populateMeseroCat();
   renderDishCatSelect();
   showToast('✅ Categoría agregada','success');
+
+  if (supabaseClient) {
+    supabaseClient.from('categories').insert([{ name: val }]).catch(e => console.error(e));
+  }
 }
 
 function deleteCategory(i) {
   if (!confirm('¿Eliminar categoría?')) return;
+  const val = state.categories[i];
   state.categories.splice(i,1);
   renderCatList();
   populateMeseroCat();
   renderDishCatSelect();
   showToast('🗑️ Categoría eliminada','success');
+
+  if (supabaseClient) {
+    supabaseClient.from('categories').delete().eq('name', val).catch(e => console.error(e));
+  }
 }
 
 function renderDishCatSelect() {
@@ -1053,10 +1216,19 @@ function saveDish() {
   });
   if (editId) {
     const d=state.menu.find(x=>x.id===editId);
-    if (d) Object.assign(d,{name,price,qty,cat,desc,emoji,consumes});
+    if (d) {
+      Object.assign(d,{name,price,qty,cat,desc,emoji,consumes});
+      if (supabaseClient) {
+        supabaseClient.from('menu').upsert([d]).catch(e => console.error(e));
+      }
+    }
     showToast('✅ Plato actualizado','success');
   } else {
-    state.menu.push({id:state.nextMenuId++,name,price,qty,cat,desc,emoji,consumes});
+    const newDish = {id:state.nextMenuId++,name,price,qty,cat,desc,emoji,consumes};
+    state.menu.push(newDish);
+    if (supabaseClient) {
+      supabaseClient.from('menu').insert([newDish]).catch(e => console.error(e));
+    }
     showToast('✅ Plato agregado','success');
   }
   closeModal('menu-modal');
@@ -1068,6 +1240,9 @@ function saveDish() {
 function deleteDish(id) {
   if (!confirm('¿Eliminar este plato?')) return;
   state.menu=state.menu.filter(x=>x.id!==id);
+  if (supabaseClient) {
+    supabaseClient.from('menu').delete().eq('id', id).catch(e => console.error(e));
+  }
   renderAdminMenu();
   renderMenuCards();
   showToast('🗑️ Plato eliminado','success');
@@ -1139,56 +1314,87 @@ if (typeof window !== 'undefined') {
 function activarListenersTiempoReal() {
   if (!supabaseClient) return; // Evita errores si Supabase no está conectado todavía
 
-  // Escuchar cambios en la tabla de pedidos (órdenes)
+  // Escuchar cambios en cualquier tabla del esquema público
   supabaseClient
-    .channel('canal-pedidos') 
+    .channel('db-changes')
     .on(
       'postgres_changes', 
-      { event: '*', schema: 'public', table: 'orders' }, 
+      { event: '*', schema: 'public' }, 
       (payload) => {
-        console.log('¡Hubo un cambio en los pedidos en la nube!', payload);
+        const table = payload.table;
+        console.log(`¡Cambio en la tabla ${table} en la nube!`, payload);
         
-        // Recargar el estado local basándose en la base de datos remota
-        loadInitialState().then(() => {
-          // Refrescar la vista actual del usuario conectado automáticamente
-          if (state.currentUser) {
-            if (state.currentUser.role === 'mesero') {
-              renderPickupAlerts();
-              renderTableBtns();
-            } else if (state.currentUser.role === 'cocina') {
-              renderKitchen();
-              renderKitchenInventory();
-            } else if (state.currentUser.role === 'admin') {
-              renderAdminVentas();
-              renderHistorial();
-              renderTablesGrid();
-              renderPersonnel();
-            }
-          }
-        });
-      }
-    )
-    .subscribe();
+        // Recargar de forma optimizada solo la tabla que cambió
+        let reloadPromise;
+        if (table === 'menu') reloadPromise = loadMenu();
+        else if (table === 'inventory') reloadPromise = loadInventory();
+        else if (table === 'users') reloadPromise = loadUsers();
+        else if (table === 'tables') reloadPromise = loadTables();
+        else if (table === 'orders') reloadPromise = loadOrders();
+        else if (table === 'activity_log') reloadPromise = loadActivityLog();
+        else if (table === 'categories') reloadPromise = loadCategories();
+        else return; // Tabla no rastreada
 
-  // Escuchar cambios en la tabla de menú (platos y precios)
-  supabaseClient
-    .channel('canal-menu')
-    .on(
-      'postgres_changes', 
-      { event: '*', schema: 'public', table: 'menu' }, 
-      (payload) => {
-        console.log('El menú sufrió una actualización en la nube:', payload);
-        
-        loadInitialState().then(() => {
-          if (state.currentUser?.role === 'mesero') {
-            renderMenuCards();
-          } else if (state.currentUser?.role === 'admin') {
-            renderAdminMenu();
-          }
+        reloadPromise.then(() => {
+          refreshUIForTable(table);
         });
       }
     )
     .subscribe();
+}
+
+function refreshUIForTable(table) {
+  if (!state.currentUser) return;
+  const role = state.currentUser.role;
+
+  if (table === 'orders') {
+    if (role === 'mesero') {
+      renderPickupAlerts();
+      renderTableBtns();
+    } else if (role === 'cocina') {
+      renderKitchen();
+    } else if (role === 'admin') {
+      renderAdminVentas();
+      renderHistorial();
+      renderTablesGrid();
+      renderPersonnel();
+    }
+  } else if (table === 'menu') {
+    if (role === 'mesero') {
+      renderMenuCards();
+    } else if (role === 'admin') {
+      renderAdminMenu();
+    }
+  } else if (table === 'inventory') {
+    if (role === 'cocina') {
+      renderKitchenInventory();
+    } else if (role === 'admin') {
+      renderInvGrid();
+      renderAdminVentas(); // Para actualizar platos agotados/insumos bajos
+    }
+  } else if (table === 'tables') {
+    if (role === 'mesero') {
+      renderTableBtns();
+    } else if (role === 'admin') {
+      renderTablesGrid();
+    }
+  } else if (table === 'users') {
+    if (role === 'admin') {
+      renderUsersGrid();
+    }
+  } else if (table === 'activity_log') {
+    if (role === 'admin') {
+      renderPersonnel();
+    }
+  } else if (table === 'categories') {
+    populateMeseroCat();
+    renderDishCatSelect();
+    if (role === 'mesero') {
+      renderMenuCards();
+    } else if (role === 'admin') {
+      renderAdminMenu();
+    }
+  }
 }
 
 // Inicializar la escucha activa en vivo inmediatamente al cargar el módulo
