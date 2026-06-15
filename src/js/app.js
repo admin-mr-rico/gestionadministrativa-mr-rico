@@ -1,3 +1,4 @@
+import { supabaseClient } from '../supabaseClient.js';
 // ═══════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════
@@ -1067,3 +1068,32 @@ function showToast(msg, type='') {
   clearTimeout(toastTimer);
   toastTimer=setTimeout(()=>t.className='toast',2800);
 }
+
+// ====== TIEMPO REAL CON SUPABASE ======
+function activarListenersTiempoReal() {
+  supabaseClient
+    .channel('canal-pedidos') 
+    .on(
+      'postgres_changes', 
+      { event: '*', schema: 'public', table: 'orders' }, 
+      (payload) => {
+        console.log('¡Hubo un cambio en los pedidos en la nube!', payload);
+        // Aquí llamarás a la función que actualiza la pantalla del restaurante
+      }
+    )
+    .subscribe();
+
+  supabaseClient
+    .channel('canal-menu')
+    .on(
+      'postgres_changes', 
+      { event: '*', schema: 'public', table: 'menu' }, 
+      (payload) => {
+        console.log('El menú sufrió una actualización en la nube:', payload);
+      }
+    )
+    .subscribe();
+}
+
+// Inicializar la escucha en vivo
+activarListenersTiempoReal();
