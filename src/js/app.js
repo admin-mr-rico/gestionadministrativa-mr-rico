@@ -1069,8 +1069,52 @@ function showToast(msg, type='') {
   toastTimer=setTimeout(()=>t.className='toast',2800);
 }
 
-// ====== TIEMPO REAL CON SUPABASE ======
+// ============================================================================
+//   INTEGRACIÓN FINAL: EXPOSICIÓN GLOBAL Y TIEMPO REAL
+// ============================================================================
+
+// 1. EXPOSICIÓN GLOBAL: Permite que los botones del HTML (onclick) encuentren las funciones del módulo
+if (typeof window !== 'undefined') {
+  window.selectRole = selectRole;
+  window.doLogin = doLogin;
+  window.doLogout = doLogout;
+  window.activateScreen = activateScreen;
+  window.markDelivered = markDelivered;
+  window.selectTable = selectTable;
+  window.addToOrder = addToOrder;
+  window.changeQty = changeQty;
+  window.clearOrder = clearOrder;
+  window.sendOrder = sendOrder;
+  window.setOrderStatus = setOrderStatus;
+  window.markPaid = markPaid;
+  window.adminTab = adminTab;
+  window.openInvModal = openInvModal;
+  window.saveInv = saveInv;
+  window.deleteInv = deleteInv;
+  window.openTableModal = openTableModal;
+  window.saveTable = saveTable;
+  window.deleteTable = deleteTable;
+  window.openUserModal = openUserModal;
+  window.saveUser = saveUser;
+  window.deleteUser = deleteUser;
+  window.openCatModal = openCatModal;
+  window.startEditCategory = startEditCategory;
+  window.cancelCategoryEdit = cancelCategoryEdit;
+  window.saveCategoryEdit = saveCategoryEdit;
+  window.addCategory = addCategory;
+  window.deleteCategory = deleteCategory;
+  window.openMenuModal = openMenuModal;
+  window.saveDish = saveDish;
+  window.deleteDish = deleteDish;
+  window.closeModal = closeModal;
+  window.addConsumeRow = addConsumeRow;
+}
+
+// 2. LISTENERS REALTIME: Actualiza la pantalla de cada dispositivo en vivo sin recargar la página
 function activarListenersTiempoReal() {
+  if (!supabaseClient) return; // Evita errores si Supabase no está conectado todavía
+
+  // Escuchar cambios en la tabla de pedidos (órdenes)
   supabaseClient
     .channel('canal-pedidos') 
     .on(
@@ -1078,11 +1122,30 @@ function activarListenersTiempoReal() {
       { event: '*', schema: 'public', table: 'orders' }, 
       (payload) => {
         console.log('¡Hubo un cambio en los pedidos en la nube!', payload);
-        // Aquí llamarás a la función que actualiza la pantalla del restaurante
+        
+        // Recargar el estado local basándose en la base de datos remota
+        loadInitialState().then(() => {
+          // Refrescar la vista actual del usuario conectado automáticamente
+          if (state.currentUser) {
+            if (state.currentUser.role === 'mesero') {
+              renderPickupAlerts();
+              renderTableBtns();
+            } else if (state.currentUser.role === 'cocina') {
+              renderKitchen();
+              renderKitchenInventory();
+            } else if (state.currentUser.role === 'admin') {
+              renderAdminVentas();
+              renderHistorial();
+              renderTablesGrid();
+              renderPersonnel();
+            }
+          }
+        });
       }
     )
     .subscribe();
 
+  // Escuchar cambios en la tabla de menú (platos y precios)
   supabaseClient
     .channel('canal-menu')
     .on(
@@ -1090,10 +1153,19 @@ function activarListenersTiempoReal() {
       { event: '*', schema: 'public', table: 'menu' }, 
       (payload) => {
         console.log('El menú sufrió una actualización en la nube:', payload);
+        
+        loadInitialState().then(() => {
+          if (state.currentUser?.role === 'mesero') {
+            renderMenuCards();
+          } else if (state.currentUser?.role === 'admin') {
+            renderAdminMenu();
+          }
+        });
       }
     )
     .subscribe();
 }
 
-// Inicializar la escucha en vivo
+// Inicializar la escucha activa en vivo inmediatamente al cargar el módulo
 activarListenersTiempoReal();
+
