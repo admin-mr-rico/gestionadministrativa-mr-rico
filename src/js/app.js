@@ -51,18 +51,22 @@ const state = {
 // Deployment: 2026-06-14
 // ──────────────────────────────────────────────────
 let supabaseClient = null;
-const SUPABASE_URL = window.SUPABASE_URL || 'REPLACE_WITH_SUPABASE_URL';
-const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || 'REPLACE_WITH_SUPABASE_ANON_KEY';
 
-if (SUPABASE_URL && SUPABASE_URL !== 'REPLACE_WITH_SUPABASE_URL') {
+// Leemos directamente las variables que Vercel inyecta en window.env
+const SUPABASE_URL = window.env?.SUPABASE_URL;
+const SUPABASE_ANON_KEY = window.env?.SUPABASE_ANON_KEY;
+
+if (SUPABASE_URL && SUPABASE_ANON_KEY) {
   try {
-    supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    // Usamos window.supabase para asegurarnos de llamar a la librería de la CDN
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     initSupabase();
+    console.log("¡Supabase configurado correctamente!");
   } catch (e) {
-    console.warn('Supabase init error', e);
+    console.warn('Error al inicializar Supabase:', e);
   }
 } else {
-  console.warn('Supabase not configured. Set window.SUPABASE_URL and window.SUPABASE_ANON_KEY to enable persistence.');
+  console.warn('Supabase no configurado en window.env. Revisa las variables en Vercel.');
 }
 
 async function initSupabase() {
