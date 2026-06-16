@@ -4,21 +4,38 @@
 
 let supabaseClient = null;
 
-function initSupabaseClient() {
+// Esperar a que Supabase CDN esté disponible
+function waitForSupabase(maxRetries = 50) {
+  return new Promise((resolve) => {
+    let retries = 0;
+    const checkInterval = setInterval(() => {
+      if (typeof window.supabase !== 'undefined') {
+        clearInterval(checkInterval);
+        console.log('✓ Supabase CDN cargado');
+        resolve(true);
+      } else if (retries >= maxRetries) {
+        clearInterval(checkInterval);
+        console.error('FATAL: Supabase CDN no se cargó después de 5 segundos');
+        resolve(false);
+      }
+      retries++;
+    }, 100);
+  });
+}
+
+async function initSupabaseClient() {
+  // Esperar CDN
+  const cdnOK = await waitForSupabase();
+  if (!cdnOK) return false;
+
   const SUPABASE_URL = window.SUPABASE_URL;
   const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
 
-  console.log('DEBUG: window.supabase =', typeof window.supabase);
   console.log('DEBUG: SUPABASE_URL =', SUPABASE_URL);
   console.log('DEBUG: SUPABASE_ANON_KEY present =', !!SUPABASE_ANON_KEY);
 
-  if (!window.supabase) {
-    console.error('FATAL: window.supabase no está cargado. Verifica que el CDN se cargue antes de app.js');
-    return false;
-  }
-
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    console.error('FATAL: SUPABASE_URL o SUPABASE_ANON_KEY no están definidas. Revisa env.js');
+    console.error('FATAL: SUPABASE_URL o SUPABASE_ANON_KEY no están definidas en env.js');
     return false;
   }
 
@@ -156,8 +173,8 @@ function activarListenersTiempoReal() {
 window.addEventListener('load', async () => {
   console.log('🚀 Window load event - inicializando app');
 
-  // 1. Inicializar Supabase
-  const supabaseOK = initSupabaseClient();
+  // 1. Inicializar Supabase (espera CDN)
+  const supabaseOK = await initSupabaseClient();
 
   if (supabaseOK) {
     // 2. Cargar datos
