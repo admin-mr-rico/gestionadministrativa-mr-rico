@@ -3,8 +3,8 @@
 -- Users
 CREATE TABLE IF NOT EXISTS users (
   id integer PRIMARY KEY,
-  name text NOT NULL,
-  username text UNIQUE NOT NULL,
+  name text,
+  username text UNIQUE,
   pass text,
   role text NOT NULL
 );
@@ -18,11 +18,11 @@ CREATE TABLE IF NOT EXISTS categories (
 -- Menu
 CREATE TABLE IF NOT EXISTS menu (
   id integer PRIMARY KEY,
-  name text NOT NULL,
-  price numeric NOT NULL,
-  qty integer DEFAULT 0,
+  name text,
+  price integer,
+  qty integer,
   cat text,
-  "desc" text,
+  desc text,
   emoji text,
   consumes jsonb
 );
@@ -30,10 +30,10 @@ CREATE TABLE IF NOT EXISTS menu (
 -- Inventory
 CREATE TABLE IF NOT EXISTS inventory (
   id integer PRIMARY KEY,
-  name text NOT NULL,
-  qty numeric DEFAULT 0,
+  name text,
+  qty numeric,
   unit text,
-  min integer DEFAULT 0,
+  min numeric,
   cat text,
   emoji text
 );
@@ -41,20 +41,21 @@ CREATE TABLE IF NOT EXISTS inventory (
 -- Tables
 CREATE TABLE IF NOT EXISTS tables (
   id integer PRIMARY KEY,
-  name text NOT NULL,
-  cap integer DEFAULT 0,
+  name text,
+  cap integer,
   zone text
 );
 
 -- Orders
 CREATE TABLE IF NOT EXISTS orders (
   id integer PRIMARY KEY,
+  table text,
   table_name text,
   waiter text,
   waiter_id integer,
   notes text,
   items jsonb,
-  total numeric DEFAULT 0,
+  total numeric,
   status text,
   payment text,
   delivered boolean DEFAULT false,

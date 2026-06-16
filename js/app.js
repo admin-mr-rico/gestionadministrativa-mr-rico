@@ -66,149 +66,7 @@ if (SUPABASE_URL && SUPABASE_ANON_KEY) {
   console.warn('Supabase no configurado en window.SUPABASE_URL ni en window.env. Revisa las variables de entorno.');
 }
 
-async function initSupabase() {
-  if (!supabaseClient) return;
-  await loadInitialState();
-  activarListenersTiempoReal();
-}
-
-async function loadInitialState() {
-  if (!supabaseClient) return;
-  try {
-    await loadMenu();
-    await loadInventory();
-    await loadUsers();
-    await loadTables();
-    await loadOrders();
-    await loadActivityLog();
-    await loadCategories();
-
-    // Hacemos sembrado inicial (seed) sólo de lo que falte en Supabase
-    await checkAndSeedDatabase();
-  } catch (e) {
-    console.error('Error loading initial state from Supabase', e);
-  }
-}
-
-async function loadMenu() {
-  if (!supabaseClient) return;
-  const { data, error } = await supabaseClient.from('menu').select('*');
-  if (error) console.error("Error loading menu:", error);
-  else if (data) {
-    state.menu = data.map(m => ({ ...m, price: Number(m.price), qty: Number(m.qty) }));
-    state.nextMenuId = state.menu.length ? Math.max(...state.menu.map(x => x.id)) + 1 : 1;
-  }
-}
-
-async function loadInventory() {
-  if (!supabaseClient) return;
-  const { data, error } = await supabaseClient.from('inventory').select('*');
-  if (error) console.error("Error loading inventory:", error);
-  else if (data) {
-    state.inventory = data.map(i => ({ ...i, qty: Number(i.qty), min: Number(i.min) }));
-    state.nextInvId = state.inventory.length ? Math.max(...state.inventory.map(x => x.id)) + 1 : 1;
-  }
-}
-
-async function loadUsers() {
-  if (!supabaseClient) return;
-  const { data, error } = await supabaseClient.from('users').select('*');
-  if (error) console.error("Error loading users:", error);
-  else if (data) {
-    state.users = data;
-    state.nextUserId = state.users.length ? Math.max(...state.users.map(x => x.id)) + 1 : 1;
-  }
-}
-
-async function loadTables() {
-  if (!supabaseClient) return;
-  const { data, error } = await supabaseClient.from('tables').select('*');
-  if (error) console.error("Error loading tables:", error);
-  else if (data) {
-    state.tables = data.map(t => ({ ...t, cap: Number(t.cap) }));
-    state.nextTableId = state.tables.length ? Math.max(...state.tables.map(x => x.id)) + 1 : 1;
-  }
-}
-
-async function loadOrders() {
-  if (!supabaseClient) return;
-  const { data, error } = await supabaseClient.from('orders').select('*');
-  if (error) console.error("Error loading orders:", error);
-  else if (data) {
-    state.orders = data.map(o => ({
-      ...o,
-      table: o.table_name || o.table,
-      items: o.items || [],
-      total: Number(o.total)
-    }));
-    state.nextOrderId = state.orders.length ? Math.max(...state.orders.map(x => x.id)) + 1 : 1;
-  }
-}
-
-async function loadActivityLog() {
-  if (!supabaseClient) return;
-  // Traer los 100 más recientes
-  const { data, error } = await supabaseClient.from('activity_log').select('*').order('id', { ascending: false }).limit(100);
-  if (error) console.error("Error loading activity log:", error);
-  else if (data) {
-    state.activityLog = data;
-  }
-}
-
-async function loadCategories() {
-  if (!supabaseClient) return;
-  const { data, error } = await supabaseClient.from('categories').select('*').order('id', { ascending: true });
-  if (error) console.error("Error loading categories:", error);
-  else if (data && data.length) {
-    state.categories = data.map(c => c.name);
-  }
-}
-
-async function checkAndSeedDatabase() {
-  if (!supabaseClient) return;
-  try {
-    // 1. Menu
-    const { data: remoteMenu } = await supabaseClient.from('menu').select('id');
-    if (remoteMenu && remoteMenu.length === 0 && state.menu.length > 0) {
-      await supabaseClient.from('menu').insert(state.menu);
-    }
-    // 2. Inventory
-    const { data: remoteInventory } = await supabaseClient.from('inventory').select('id');
-    if (remoteInventory && remoteInventory.length === 0 && state.inventory.length > 0) {
-      await supabaseClient.from('inventory').insert(state.inventory);
-    }
-    // 3. Users
-    const { data: remoteUsers } = await supabaseClient.from('users').select('id');
-    if (remoteUsers && remoteUsers.length === 0 && state.users.length > 0) {
-      await supabaseClient.from('users').insert(state.users);
-    }
-    // 4. Tables
-    const { data: remoteTables } = await supabaseClient.from('tables').select('id');
-    if (remoteTables && remoteTables.length === 0 && state.tables.length > 0) {
-      await supabaseClient.from('tables').insert(state.tables);
-    }
-    // 5. Categories
-    const { data: remoteCats } = await supabaseClient.from('categories').select('id');
-    if (remoteCats && remoteCats.length === 0 && state.categories.length > 0) {
-      await supabaseClient.from('categories').insert(state.categories.map(name => ({ name })));
-    }
-  } catch (e) {
-    console.error("Error seeding database:", e);
-  }
-}
-
-
-// ═══════════════════════════════════════════
-//  LOGIN / LOGOUT
-// ═══════════════════════════════════════════
-let selectedRole = 'mesero';
-function selectRole(btn) {
-  document.querySelectorAll('.role-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  selectedRole = btn.dataset.role;
-}
-
-function doLogin() {
+async function doLogin() {
   const u = document.getElementById('login-user').value.trim();
   const p = document.getElementById('login-pass').value;
   const err = document.getElementById('login-error');
@@ -223,6 +81,10 @@ function doLogin() {
   if (!user) { err.style.display='block'; return; }
   err.style.display='none';
   state.currentUser = user;
+
+  if (supabaseClient) {
+    await loadOrders();
+  }
 
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='flex';
@@ -550,7 +412,7 @@ function updateInventoryForOrder(order) {
           inv.qty = Math.max(0, inv.qty - (c.qty || 1) * qty);
           logActivity('Sistema','inventario',`Consumió ${ (c.qty||1)*qty } ${inv.unit} de ${inv.name} por pedido #${order.id}`,'#6F42C1');
           if (supabaseClient) {
-            supabaseClient.from('inventory').update({ qty: inv.qty }).eq('id', inv.id).catch(e => console.error(e));
+            supabaseClient.from('inventory').update({ qty: inv.qty }).eq('id', inv.id).catch(e => console.error("Error updating menu qty:", e));
           }
         }
       });
@@ -1311,7 +1173,7 @@ if (typeof window !== 'undefined') {
 
 // 2. LISTENERS REALTIME: Actualiza la pantalla de cada dispositivo en vivo sin recargar la página
 function activarListenersTiempoReal() {
-  if (!supabaseClient) return; // Evita errores si Supabase no está conectado todavía
+  if (!supabaseClient) return;
 
   supabaseClient
     .channel('orders-realtime')
@@ -1326,7 +1188,9 @@ function activarListenersTiempoReal() {
         if (state.currentUser?.role === 'admin') renderAdminVentas();
       }
     )
-    .subscribe();
+    .subscribe(status => {
+      if (status === 'SUBSCRIBED') console.log('Supabase realtime orders subscribed');
+    });
 }
 
 // Inicializar la escucha activa en vivo inmediatamente al cargar el módulo
