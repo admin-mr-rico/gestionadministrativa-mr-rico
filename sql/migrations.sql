@@ -92,13 +92,47 @@ BEGIN
   END IF;
 END $$;
 
-DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE users; EXCEPTION WHEN duplicate_table THEN END $$;
-DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE categories; EXCEPTION WHEN duplicate_table THEN END $$;
-DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE menu; EXCEPTION WHEN duplicate_table THEN END $$;
-DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE inventory; EXCEPTION WHEN duplicate_table THEN END $$;
-DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE tables; EXCEPTION WHEN duplicate_table THEN END $$;
-DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE orders; EXCEPTION WHEN duplicate_table THEN END $$;
-DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE activity_log; EXCEPTION WHEN duplicate_table THEN END $$;
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE users;
+EXCEPTION WHEN duplicate_table THEN
+  NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE categories;
+EXCEPTION WHEN duplicate_table THEN
+  NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE menu;
+EXCEPTION WHEN duplicate_table THEN
+  NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE inventory;
+EXCEPTION WHEN duplicate_table THEN
+  NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE tables;
+EXCEPTION WHEN duplicate_table THEN
+  NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE orders;
+EXCEPTION WHEN duplicate_table THEN
+  NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE activity_log;
+EXCEPTION WHEN duplicate_table THEN
+  NULL;
+END $$;
 
 -- 2. Configuración de RLS (Seguridad a Nivel de Fila)
 -- Para garantizar que el cliente anónimo (anon_key) pueda leer y escribir datos sin autenticación OAuth compleja:
