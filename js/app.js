@@ -49,6 +49,8 @@ const state = {
 // Supabase integration (basic)
 // Deployment: 2026-06-14
 // ──────────────────────────────────────────────────
+import { supabaseClient } from '../supabaseClient.js';
+
 let supabaseClient = null;
 const SUPABASE_URL = window.SUPABASE_URL || window.env?.SUPABASE_URL;
 const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || window.env?.SUPABASE_ANON_KEY;
@@ -58,10 +60,12 @@ if (SUPABASE_URL && SUPABASE_ANON_KEY && typeof window !== 'undefined' && window
   window.supabaseClient = supabaseClient;
 }
 
-// Inicializar Supabase y cargar pedidos actuales al cargar la página
+if (!supabaseClient) {
+  console.error('Supabase no inicializado. Revisa env.js / variables de entorno / carga del CDN');
+}
+
 async function initSupabase() {
   if (!supabaseClient) {
-    console.error('Supabase no inicializado: revisa env.js o las variables de entorno');
     return;
   }
 
@@ -107,6 +111,8 @@ function activarListenersTiempoReal() {
     .subscribe(status => {
       if (status === 'SUBSCRIBED') {
         console.log('Supabase realtime orders suscrito');
+      } else {
+        console.warn('Realtime subscription status:', status);
       }
     });
 }

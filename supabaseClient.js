@@ -12,5 +12,6 @@ export const supabaseClient = (typeof window !== 'undefined' && window.supabase)
   ? window.supabase.createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
-// Exponer para debug en consola
-if (typeof window !== 'undefined') window.supabaseClient = supabaseClient;
+if (typeof window !== 'undefined') {
+  window.supabaseClient = supabaseClient;
+}

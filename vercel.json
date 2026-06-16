@@ -1,8 +1,7 @@
 {
-  "buildCommand": "echo 'No build required'",
-  "installCommand": "echo 'No installation needed'",
-  "outputDirectory": "src",
-  "public": "src",
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "outputDirectory": ".",
   "routes": [
     { "src": "/css/(.*)",    "dest": "/css/$1" },
     { "src": "/js/(.*)",     "dest": "/js/$1" },
