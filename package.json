@@ -1,0 +1,11 @@
+{
+  "name": "mr-rico-gestion",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "node generate-env.js"
+  }
+}

@@ -18,5 +18,10 @@ build/
 # Temporary
 *.tmp
 
+<<<<<<< HEAD
 # Ignore local runtime env file for Supabase
 src/env.js
+=======
+# Ignore local runtime env file
+env.js
+>>>>>>> 28eb97e (prueba de cambios online)
