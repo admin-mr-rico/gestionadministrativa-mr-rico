@@ -1,37 +1,12 @@
 {
-<<<<<<< HEAD
-  "buildCommand": "cd src && node generate-env.js",
+  "buildCommand": "echo 'No build required'",
   "installCommand": "echo 'No installation needed'",
   "outputDirectory": "src",
   "public": "src",
   "routes": [
-    {
-      "src": "/css/(.*)",
-      "dest": "/css/$1"
-    },
-    {
-      "src": "/js/(.*)",
-      "dest": "/js/$1"
-    },
-    {
-      "src": "/assets/(.*)",
-      "dest": "/assets/$1"
-=======
-  "buildCommand": "npm run build",
-  "installCommand": "echo 'No installation needed'",
-  "outputDirectory": ".",
-  "routes": [
-    {
-      "handle": "filesystem"
->>>>>>> 28eb97e (prueba de cambios online)
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
-    }
+    { "src": "/css/(.*)",    "dest": "/css/$1" },
+    { "src": "/js/(.*)",     "dest": "/js/$1" },
+    { "src": "/assets/(.*)", "dest": "/assets/$1" },
+    { "src": "/(.*)",        "dest": "/index.html" }
   ]
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> 28eb97e (prueba de cambios online)
