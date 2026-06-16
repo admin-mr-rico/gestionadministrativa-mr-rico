@@ -3,6 +3,7 @@
 // ═══════════════════════════════════════════
 
 let supabaseClient = null;
+let supabaseAvailable = false;
 
 // Esperar a que Supabase CDN esté disponible
 function waitForSupabase(maxRetries = 50) {
@@ -15,7 +16,7 @@ function waitForSupabase(maxRetries = 50) {
         resolve(true);
       } else if (retries >= maxRetries) {
         clearInterval(checkInterval);
-        console.error('FATAL: Supabase CDN no se cargó después de 5 segundos');
+        console.error('⚠ Supabase CDN no se cargó. Usando datos locales.');
         resolve(false);
       }
       retries++;
@@ -26,7 +27,10 @@ function waitForSupabase(maxRetries = 50) {
 async function initSupabaseClient() {
   // Esperar CDN
   const cdnOK = await waitForSupabase();
-  if (!cdnOK) return false;
+  if (!cdnOK) {
+    supabaseAvailable = false;
+    return false;
+  }
 
   const SUPABASE_URL = window.SUPABASE_URL;
   const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
@@ -35,7 +39,8 @@ async function initSupabaseClient() {
   console.log('DEBUG: SUPABASE_ANON_KEY present =', !!SUPABASE_ANON_KEY);
 
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    console.error('FATAL: SUPABASE_URL o SUPABASE_ANON_KEY no están definidas en env.js');
+    console.error('⚠ SUPABASE_URL o SUPABASE_ANON_KEY no están definidas. Usando datos locales.');
+    supabaseAvailable = false;
     return false;
   }
 
@@ -43,9 +48,11 @@ async function initSupabaseClient() {
     supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     window.supabaseClient = supabaseClient;
     console.log('✓ Supabase client inicializado correctamente');
+    supabaseAvailable = true;
     return true;
   } catch (err) {
-    console.error('✗ Error al crear Supabase client:', err);
+    console.error('⚠ Error al crear Supabase client:', err);
+    supabaseAvailable = false;
     return false;
   }
 }
@@ -97,10 +104,12 @@ const state = {
   activityLog: []
 };
 
-// CARGAR PEDIDOS Y SUSCRIBIR A CAMBIOS
+// ═══════════════════════════════════════════
+// CARGAR PEDIDOS
+// ═══════════════════════════════════════════
 async function loadOrders() {
-  if (!supabaseClient) {
-    console.warn('loadOrders: supabaseClient aún no inicializado');
+  if (!supabaseAvailable || !supabaseClient) {
+    console.log('ℹ Usando pedidos locales (Supabase no disponible)');
     return;
   }
   
@@ -111,12 +120,12 @@ async function loadOrders() {
       .order('id', { ascending: false });
 
     if (error) {
-      console.error('Error loading orders:', error);
+      console.error('Error loading orders from Supabase:', error);
       return;
     }
 
     state.orders = data || [];
-    console.log('✓ Pedidos cargados:', state.orders.length);
+    console.log('✓ Pedidos cargados de Supabase:', state.orders.length);
   } catch (err) {
     console.error('Exception loading orders:', err);
   }
@@ -137,8 +146,8 @@ function renderScreensAfterOrdersUpdate() {
 }
 
 function activarListenersTiempoReal() {
-  if (!supabaseClient) {
-    console.warn('activarListenersTiempoReal: supabaseClient no inicializado');
+  if (!supabaseAvailable || !supabaseClient) {
+    console.log('ℹ Realtime desactivado (Supabase no disponible)');
     return;
   }
 
@@ -174,16 +183,14 @@ window.addEventListener('load', async () => {
   console.log('🚀 Window load event - inicializando app');
 
   // 1. Inicializar Supabase (espera CDN)
-  const supabaseOK = await initSupabaseClient();
+  await initSupabaseClient();
 
-  if (supabaseOK) {
-    // 2. Cargar datos
-    await loadOrders();
+  // 2. Cargar datos (local o remoto)
+  await loadOrders();
 
-    // 3. Activar listeners
-    activarListenersTiempoReal();
-  } else {
-    console.error('No se pudo inicializar Supabase. La app no funcionará.');
-  }
+  // 3. Activar listeners (si Supabase está disponible)
+  activarListenersTiempoReal();
+
+  console.log('✓ App inicializada. Supabase disponible:', supabaseAvailable);
 });
 
