@@ -480,11 +480,14 @@
 
   <div class="toast" id="toast"></div>
 
-  <!-- Supabase client (CDN) -->
+  <!-- Supabase CDN (PRIMERO) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.min.js"></script>
-  <script src="./env.js" defer></script>
-  <script type="module" src="js/app.js"></script>
-
+  
+  <!-- Env vars (SEGUNDO) -->
+  <script src="./env.js"></script>
+  
+  <!-- App (TERCERO, módulo) -->
+  <script type="module" src="./js/app.js"></script>
 </body>
 
 </html>

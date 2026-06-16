@@ -45,6 +45,27 @@ const state = {
   activityLog: []
 };
 
+// PRIMERO: crear cliente Supabase GLOBAL
+let supabaseClient = null;
+
+const SUPABASE_URL = window.SUPABASE_URL;
+const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
+
+console.log('DEBUG: SUPABASE_URL =', SUPABASE_URL);
+console.log('DEBUG: SUPABASE_ANON_KEY present =', !!SUPABASE_ANON_KEY);
+
+if (SUPABASE_URL && SUPABASE_ANON_KEY && typeof window.supabase !== 'undefined') {
+  try {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    window.supabaseClient = supabaseClient;
+    console.log('✓ Supabase client inicializado');
+  } catch (err) {
+    console.error('✗ Error creando Supabase client:', err);
+  }
+} else {
+  console.error('✗ FATAL: falta SUPABASE_URL, SUPABASE_ANON_KEY o window.supabase');
+}
+
 // ──────────────────────────────────────────────────
 // Supabase integration (basic)
 // Deployment: 2026-06-14
@@ -64,15 +85,7 @@ if (!supabaseClient) {
   console.error('Supabase no inicializado. Revisa env.js / variables de entorno / carga del CDN');
 }
 
-async function initSupabase() {
-  if (!supabaseClient) {
-    return;
-  }
-
-  await loadOrders();
-  activarListenersTiempoReal();
-}
-
+// CARGAR PEDIDOS Y SUSCRIBIR A CAMBIOS
 async function loadOrders() {
   if (!supabaseClient) return;
   const { data, error } = await supabaseClient
@@ -81,11 +94,11 @@ async function loadOrders() {
     .order('id', { ascending: false });
 
   if (error) {
-    console.error('Error cargando orders desde Supabase:', error);
+    console.error('Error loading orders:', error);
     return;
   }
-
   state.orders = data || [];
+  console.log('✓ Pedidos cargados:', state.orders.length);
 }
 
 function renderScreensAfterOrdersUpdate() {
@@ -95,27 +108,40 @@ function renderScreensAfterOrdersUpdate() {
 }
 
 function activarListenersTiempoReal() {
-  if (!supabaseClient) return;
+  if (!supabaseClient) {
+    console.warn('No se puede activar realtime: supabaseClient es null');
+    return;
+  }
+
+  console.log('Activando listener realtime para orders...');
 
   supabaseClient
     .channel('orders-realtime')
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'orders' },
-      async payload => {
-        console.log('Realtime orders event:', payload);
+      async (payload) => {
+        console.log('🔴 EVENTO REALTIME RECIBIDO:', payload.eventType, payload.new || payload.old);
         await loadOrders();
-        renderScreensAfterOrdersUpdate();
+        
+        // Renderizar según el rol del usuario
+        if (state.currentUser?.role === 'cocina') renderKitchen();
+        if (state.currentUser?.role === 'mesero') renderPickupAlerts();
+        if (state.currentUser?.role === 'admin') renderAdminVentas();
       }
     )
-    .subscribe(status => {
-      if (status === 'SUBSCRIBED') {
-        console.log('Supabase realtime orders suscrito');
-      } else {
-        console.warn('Realtime subscription status:', status);
-      }
+    .subscribe((status) => {
+      console.log('Realtime subscription status:', status);
+      if (status === 'SUBSCRIBED') console.log('✓ Suscripción a realtime ACTIVA');
     });
 }
 
-window.addEventListener('load', initSupabase);
+// Iniciar cuando carga la página
+window.addEventListener('load', async () => {
+  console.log('Window load event');
+  if (supabaseClient) {
+    await loadOrders();
+    activarListenersTiempoReal();
+  }
+});
 
