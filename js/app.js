@@ -1,5 +1,40 @@
 // ═══════════════════════════════════════════
-//  STATE
+// INICIALIZACIÓN SUPABASE (PRIMERO)
+// ═══════════════════════════════════════════
+
+let supabaseClient = null;
+
+function initSupabaseClient() {
+  const SUPABASE_URL = window.SUPABASE_URL;
+  const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
+
+  console.log('DEBUG: window.supabase =', typeof window.supabase);
+  console.log('DEBUG: SUPABASE_URL =', SUPABASE_URL);
+  console.log('DEBUG: SUPABASE_ANON_KEY present =', !!SUPABASE_ANON_KEY);
+
+  if (!window.supabase) {
+    console.error('FATAL: window.supabase no está cargado. Verifica que el CDN se cargue antes de app.js');
+    return false;
+  }
+
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    console.error('FATAL: SUPABASE_URL o SUPABASE_ANON_KEY no están definidas. Revisa env.js');
+    return false;
+  }
+
+  try {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    window.supabaseClient = supabaseClient;
+    console.log('✓ Supabase client inicializado correctamente');
+    return true;
+  } catch (err) {
+    console.error('✗ Error al crear Supabase client:', err);
+    return false;
+  }
+}
+
+// ═══════════════════════════════════════════
+// STATE
 // ═══════════════════════════════════════════
 const state = {
   currentUser: null,
@@ -45,103 +80,93 @@ const state = {
   activityLog: []
 };
 
-// PRIMERO: crear cliente Supabase GLOBAL
-let supabaseClient = null;
-
-const SUPABASE_URL = window.SUPABASE_URL;
-const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
-
-console.log('DEBUG: SUPABASE_URL =', SUPABASE_URL);
-console.log('DEBUG: SUPABASE_ANON_KEY present =', !!SUPABASE_ANON_KEY);
-
-if (SUPABASE_URL && SUPABASE_ANON_KEY && typeof window.supabase !== 'undefined') {
-  try {
-    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    window.supabaseClient = supabaseClient;
-    console.log('✓ Supabase client inicializado');
-  } catch (err) {
-    console.error('✗ Error creando Supabase client:', err);
-  }
-} else {
-  console.error('✗ FATAL: falta SUPABASE_URL, SUPABASE_ANON_KEY o window.supabase');
-}
-
-// ──────────────────────────────────────────────────
-// Supabase integration (basic)
-// Deployment: 2026-06-14
-// ──────────────────────────────────────────────────
-import { supabaseClient } from '../supabaseClient.js';
-
-let supabaseClient = null;
-const SUPABASE_URL = window.SUPABASE_URL || window.env?.SUPABASE_URL;
-const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || window.env?.SUPABASE_ANON_KEY;
-
-if (SUPABASE_URL && SUPABASE_ANON_KEY && typeof window !== 'undefined' && window.supabase) {
-  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  window.supabaseClient = supabaseClient;
-}
-
-if (!supabaseClient) {
-  console.error('Supabase no inicializado. Revisa env.js / variables de entorno / carga del CDN');
-}
-
 // CARGAR PEDIDOS Y SUSCRIBIR A CAMBIOS
 async function loadOrders() {
-  if (!supabaseClient) return;
-  const { data, error } = await supabaseClient
-    .from('orders')
-    .select('*')
-    .order('id', { ascending: false });
-
-  if (error) {
-    console.error('Error loading orders:', error);
+  if (!supabaseClient) {
+    console.warn('loadOrders: supabaseClient aún no inicializado');
     return;
   }
-  state.orders = data || [];
-  console.log('✓ Pedidos cargados:', state.orders.length);
+  
+  try {
+    const { data, error } = await supabaseClient
+      .from('orders')
+      .select('*')
+      .order('id', { ascending: false });
+
+    if (error) {
+      console.error('Error loading orders:', error);
+      return;
+    }
+
+    state.orders = data || [];
+    console.log('✓ Pedidos cargados:', state.orders.length);
+  } catch (err) {
+    console.error('Exception loading orders:', err);
+  }
 }
 
 function renderScreensAfterOrdersUpdate() {
-  if (state.currentUser?.role === 'cocina') renderKitchen();
-  if (state.currentUser?.role === 'mesero') renderPickupAlerts();
-  if (state.currentUser?.role === 'admin') renderAdminVentas();
+  if (!state.currentUser) return;
+
+  if (state.currentUser.role === 'cocina' && typeof renderKitchen === 'function') {
+    renderKitchen();
+  }
+  if (state.currentUser.role === 'mesero' && typeof renderPickupAlerts === 'function') {
+    renderPickupAlerts();
+  }
+  if (state.currentUser.role === 'admin' && typeof renderAdminVentas === 'function') {
+    renderAdminVentas();
+  }
 }
 
 function activarListenersTiempoReal() {
   if (!supabaseClient) {
-    console.warn('No se puede activar realtime: supabaseClient es null');
+    console.warn('activarListenersTiempoReal: supabaseClient no inicializado');
     return;
   }
 
   console.log('Activando listener realtime para orders...');
 
-  supabaseClient
-    .channel('orders-realtime')
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'orders' },
-      async (payload) => {
-        console.log('🔴 EVENTO REALTIME RECIBIDO:', payload.eventType, payload.new || payload.old);
+  const channel = supabaseClient.channel('orders-realtime');
+
+  channel.on(
+    'postgres_changes',
+    { event: '*', schema: 'public', table: 'orders' },
+    async (payload) => {
+      console.log('🔴 EVENTO REALTIME RECIBIDO:', payload.eventType, payload.new || payload.old);
+      try {
         await loadOrders();
-        
-        // Renderizar según el rol del usuario
-        if (state.currentUser?.role === 'cocina') renderKitchen();
-        if (state.currentUser?.role === 'mesero') renderPickupAlerts();
-        if (state.currentUser?.role === 'admin') renderAdminVentas();
+        renderScreensAfterOrdersUpdate();
+      } catch (err) {
+        console.error('Error procesando evento realtime:', err);
       }
-    )
-    .subscribe((status) => {
-      console.log('Realtime subscription status:', status);
-      if (status === 'SUBSCRIBED') console.log('✓ Suscripción a realtime ACTIVA');
-    });
+    }
+  ).subscribe((status) => {
+    console.log('Realtime subscription status:', status);
+    if (status === 'SUBSCRIBED') {
+      console.log('✓ Suscripción a realtime ACTIVA para orders');
+    }
+  });
 }
 
-// Iniciar cuando carga la página
+// ═══════════════════════════════════════════
+// INICIO (cuando carga todo)
+// ═══════════════════════════════════════════
+
 window.addEventListener('load', async () => {
-  console.log('Window load event');
-  if (supabaseClient) {
+  console.log('🚀 Window load event - inicializando app');
+
+  // 1. Inicializar Supabase
+  const supabaseOK = initSupabaseClient();
+
+  if (supabaseOK) {
+    // 2. Cargar datos
     await loadOrders();
+
+    // 3. Activar listeners
     activarListenersTiempoReal();
+  } else {
+    console.error('No se pudo inicializar Supabase. La app no funcionará.');
   }
 });
 
