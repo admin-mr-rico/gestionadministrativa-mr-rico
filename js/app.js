@@ -182,15 +182,15 @@ function activarListenersTiempoReal() {
 window.addEventListener('load', async () => {
   console.log('🚀 Window load event - inicializando app');
 
-  // 1. Inicializar Supabase (espera CDN)
-  await initSupabaseClient();
+  // 1. Inicializar Supabase
+  supabaseClient = window.initSupabase();
 
-  // 2. Cargar datos (local o remoto)
+  // 2. Cargar datos
   await loadOrders();
 
-  // 3. Activar listeners (si Supabase está disponible)
+  // 3. Activar listeners
   activarListenersTiempoReal();
 
-  console.log('✓ App inicializada. Supabase disponible:', supabaseAvailable);
+  console.log('✓ App inicializada. Supabase disponible:', !!supabaseClient);
 });
 
