@@ -6,6 +6,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Mr Rico – Sistema de Gestión</title>
   <link rel="stylesheet" href="./css/styles.css">
+  
+  <!-- ⚠️ IMPORTANTE: Supabase CDN PRIMERO (sin defer) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.min.js"></script>
 </head>
 
 <body>
@@ -36,16 +39,13 @@
   <div class="toast" id="toast"></div>
 
   <!-- ════════════════════════════════════════ -->
-  <!-- SCRIPTS EN ORDEN ESTRICTO (SIN MÓDULOS) -->
+  <!-- SCRIPTS EN ORDEN: CDN → ENV → APP -->
   <!-- ════════════════════════════════════════ -->
-
-  <!-- 1. Supabase CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.min.js"></script>
   
-  <!-- 2. Variables de entorno -->
+  <!-- ✓ Variables de entorno (SEGUNDO) -->
   <script src="./env.js"></script>
   
-  <!-- 3. App (script normal, NO type=module) -->
+  <!-- ✓ App (TERCERO) -->
   <script src="./js/app.js"></script>
 
 </body>
