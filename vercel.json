@@ -1,7 +1,7 @@
 {
-  "buildCommand": "npm run build",
+  "buildCommand": "cd src && npm run build",
   "installCommand": "echo 'No installation needed'",
-  "outputDirectory": ".",
+  "outputDirectory": "src",
   "routes": [
     {
       "handle": "filesystem"
