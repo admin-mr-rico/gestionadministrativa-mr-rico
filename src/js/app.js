@@ -70,6 +70,8 @@ if (SUPABASE_URL && SUPABASE_ANON_KEY) {
 
 async function initSupabase() {
   await loadInitialState();
+  
+  activarListenersTiempoReal();
 }
 
 async function loadInitialState() {
@@ -1396,7 +1398,3 @@ function refreshUIForTable(table) {
     }
   }
 }
-
-// Inicializar la escucha activa en vivo inmediatamente al cargar el módulo
-activarListenersTiempoReal();
-
