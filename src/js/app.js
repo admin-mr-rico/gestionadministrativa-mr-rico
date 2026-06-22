@@ -4,8 +4,8 @@
 const state = {
   currentUser: null,
   users: [
-    { id: 1, name: 'Administrador', username: 'admin', pass: '1821', role: 'admin' },
-    { id: 2, name: 'Mesero Demo',   username: 'mesero', pass: '1234', role: 'mesero' },
+    { id: 1, name: 'Administrador', username: 'admin', pass: '12345', role: 'admin' },
+    { id: 2, name: 'Mesero Demo',   username: 'mesero', pass: '12345', role: 'mesero' },
     { id: 3, name: 'Cocinero Demo', username: 'cocina', pass: '1234', role: 'cocina' }
   ],
   nextUserId: 4,
