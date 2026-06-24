@@ -1,6 +1,6 @@
 {
-  "buildCommand": "npm --prefix src run build",
-  "installCommand": "npm --prefix src install",
+  "buildCommand": "cd src && npm run build",
+  "installCommand": "cd src && npm install",
   "outputDirectory": "src",
   "routes": [
     {
