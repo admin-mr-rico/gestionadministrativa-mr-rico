@@ -4,8 +4,8 @@
 const state = {
   currentUser: null,
   users: [
-    { id: 1, name: 'Administrador', username: 'admin', pass: '12345', role: 'admin' },
-    { id: 2, name: 'Mesero Demo',   username: 'mesero', pass: '12345', role: 'mesero' },
+    { id: 1, name: 'Administrador', username: 'admin', pass: '1234', role: 'admin' },
+    { id: 2, name: 'Mesero Demo',   username: 'mesero', pass: '1234', role: 'mesero' },
     { id: 3, name: 'Cocinero Demo', username: 'cocina', pass: '1234', role: 'cocina' }
   ],
   nextUserId: 4,
@@ -44,6 +44,9 @@ const state = {
   selectedTable: null,
   activityLog: []
 };
+
+// Guardamos una copia de los usuarios por defecto para fallback local
+const DEFAULT_USERS = state.users.map(u => ({ ...u }));
 
 // ──────────────────────────────────────────────────
 // Supabase integration (basic)
@@ -220,6 +223,19 @@ function doLogin() {
     user = state.users.find(x => x.role === 'admin' && x.username === u && x.pass === p);
   } else {
     user = state.users.find(x => x.role === selectedRole && x.username === u && x.pass === p);
+  }
+
+  // Fallback: si el usuario no existe en `state.users` (por ejemplo la carga desde Supabase
+  // devolvió esquemas distintos o contraseñas distintas), intentamos con los usuarios por defecto
+  // embebidos en la app (`DEFAULT_USERS`). Si encontramos match, lo añadimos a `state.users`.
+  if (!user) {
+    const fb = DEFAULT_USERS.find(x => x.role === selectedRole && x.username === u && x.pass === p);
+    if (fb) {
+      user = { ...fb };
+      if (!state.users.find(x => x.username === user.username && x.role === user.role)) {
+        state.users.push(user);
+      }
+    }
   }
 
   if (!user) { err.style.display='block'; return; }
@@ -902,12 +918,13 @@ function deleteTable(id) {
 // ═══════════════════════════════════════════
 //  ADMIN – PERSONAL
 // ═══════════════════════════════════════════
-function logActivity(person, role, action, color) {
+async function logActivity(person, role, action, color) {
   const item = { person, role, action, color, time: new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) };
   state.activityLog.unshift(item);
   if (state.activityLog.length > 100) state.activityLog.pop();
   if (supabaseClient) {
-    supabaseClient.from('activity_log').insert([item]).catch(e => console.error("Error al registrar actividad en Supabase:", e));
+    const { error } = await supabaseClient.from('activity_log').insert([item]);
+    if (error) console.error("Error al registrar actividad en Supabase:", error);
   }
 }
 
