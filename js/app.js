@@ -451,10 +451,24 @@ async function sendOrder() {
     delivered: false,
     time: new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}),
     date: new Date().toLocaleDateString('es-CO'),
-    inventoryUpdated: false
+    inventoryupdated: false
   };
 
-  const { table, ...orderForDb } = order;
+  const orderForDb = {
+    id: order.id,
+    table_name: order.table_name,
+    waiter: order.waiter,
+    waiter_id: order.waiter_id,
+    notes: order.notes,
+    items: order.items,
+    total: order.total,
+    status: order.status,
+    payment: order.payment,
+    delivered: order.delivered,
+    time: order.time,
+    date: order.date,
+    inventoryupdated: order.inventoryupdated
+  };
 
   state.orders.push(order);
   
@@ -544,7 +558,7 @@ function setOrderStatus(id, status) {
   o.status = status;
   const lbl = {preparing:'comenzó preparación de',done:'marcó como listo el'};
   logActivity(state.currentUser.name,'cocina',`${lbl[status]||'actualizó'} pedido #${o.id} (${o.table})`,'#FF6B1A');
-  if (status === 'done' && !o.inventoryUpdated) {
+  if (status === 'done' && !o.inventoryupdated) {
     updateInventoryForOrder(o);
   }
   renderKitchen();
@@ -554,14 +568,14 @@ function setOrderStatus(id, status) {
   if (supabaseClient) {
     supabaseClient
       .from('orders')
-      .update({ status: status, inventoryUpdated: o.inventoryUpdated })
+      .update({ status: status, inventoryupdated: o.inventoryupdated })
       .eq('id', id)
       .then(({ error }) => { if (error) console.error("Error al actualizar estado en Supabase:", error); });
   }
 }
 
 function updateInventoryForOrder(order) {
-  if (!order || order.inventoryUpdated) return;
+  if (!order || order.inventoryupdated) return;
   order.items.forEach(it => {
     const menuItem = state.menu.find(m=>m.id===it.id || m.name===it.name);
     const qty = it.qty || 1;
@@ -592,7 +606,7 @@ function updateInventoryForOrder(order) {
       }
     }
   });
-  order.inventoryUpdated = true;
+  order.inventoryupdated = true;
   renderInvGrid();
   renderKitchenInventory();
   renderAdminVentas();
