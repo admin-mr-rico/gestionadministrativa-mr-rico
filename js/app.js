@@ -440,7 +440,7 @@ async function sendOrder() {
   const order = {
     id: state.nextOrderId++,
     table: tableName,
-    table_name: tableName, // Corregido para que coincida con tu columna SQL de Supabase
+    table_name: tableName,
     waiter: state.currentUser.name,
     waiter_id: state.currentUser.id,
     notes,
@@ -453,6 +453,8 @@ async function sendOrder() {
     date: new Date().toLocaleDateString('es-CO'),
     inventoryUpdated: false
   };
+
+  const { table, ...orderForDb } = order;
 
   state.orders.push(order);
   
@@ -474,7 +476,7 @@ async function sendOrder() {
   if (supabaseClient) {
     const { error } = await supabaseClient
       .from('orders')
-      .insert([order]);
+      .insert([orderForDb]);
 
     if (error) {
       console.error("Error al guardar en Supabase:", error.message);
