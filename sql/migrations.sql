@@ -101,20 +101,34 @@ END $$;
 -- Para garantizar que el cliente anónimo (anon_key) pueda leer y escribir datos sin autenticación OAuth compleja:
 
 -- Opción A: Desactivar RLS por completo (Recomendado para entornos locales/desarrollo interno rápido)
-ALTER TABLE users DISABLE ROW LEVEL SECURITY;
-ALTER TABLE menu DISABLE ROW LEVEL SECURITY;
-ALTER TABLE inventory DISABLE ROW LEVEL SECURITY;
-ALTER TABLE tables DISABLE ROW LEVEL SECURITY;
-ALTER TABLE orders DISABLE ROW LEVEL SECURITY;
-ALTER TABLE activity_log DISABLE ROW LEVEL SECURITY;
-ALTER TABLE categories DISABLE ROW LEVEL SECURITY;
+--ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+--ALTER TABLE menu DISABLE ROW LEVEL SECURITY;
+--ALTER TABLE inventory DISABLE ROW LEVEL SECURITY;
+--ALTER TABLE tables DISABLE ROW LEVEL SECURITY;
+--ALTER TABLE orders DISABLE ROW LEVEL SECURITY;
+--ALTER TABLE activity_log DISABLE ROW LEVEL SECURITY;
+--ALTER TABLE categories DISABLE ROW LEVEL SECURITY;
 
 -- Opción B: Si prefieres mantener RLS activo, ejecuta estas políticas abiertas en la consola SQL de Supabase:
--- CREATE POLICY "Permitir todo a anon" ON users FOR ALL TO public USING (true) WITH CHECK (true);
--- CREATE POLICY "Permitir todo a anon" ON menu FOR ALL TO public USING (true) WITH CHECK (true);
--- CREATE POLICY "Permitir todo a anon" ON inventory FOR ALL TO public USING (true) WITH CHECK (true);
--- CREATE POLICY "Permitir todo a anon" ON tables FOR ALL TO public USING (true) WITH CHECK (true);
--- CREATE POLICY "Permitir todo a anon" ON orders FOR ALL TO public USING (true) WITH CHECK (true);
--- CREATE POLICY "Permitir todo a anon" ON activity_log FOR ALL TO public USING (true) WITH CHECK (true);
--- CREATE POLICY "Permitir todo a anon" ON categories FOR ALL TO public USING (true) WITH CHECK (true);
+CREATE POLICY "Permitir todo a anon" ON users FOR ALL TO public USING (true) WITH CHECK (true);
+CREATE POLICY "Permitir todo a anon" ON menu FOR ALL TO public USING (true) WITH CHECK (true);
+CREATE POLICY "Permitir todo a anon" ON inventory FOR ALL TO public USING (true) WITH CHECK (true);
+CREATE POLICY "Permitir todo a anon" ON tables FOR ALL TO public USING (true) WITH CHECK (true);
+CREATE POLICY "Permitir todo a anon" ON orders FOR ALL TO public USING (true) WITH CHECK (true);
+CREATE POLICY "Permitir todo a anon" ON activity_log FOR ALL TO public USING (true) WITH CHECK (true);
+CREATE POLICY "Permitir todo a anon" ON categories FOR ALL TO public USING (true) WITH CHECK (true);
+
+-- -----------------------------------------------------------------
+-- Compatibilidad: asegurar que la columna `inventoryUpdated`
+-- exista en la tabla `orders` (evita errores 400 al insertar pedidos)
+-- -----------------------------------------------------------------
+ALTER TABLE public.orders
+  ADD COLUMN IF NOT EXISTS "inventoryUpdated" boolean DEFAULT false;
+
+-- Añadimos también una variante con snake_case por compatibilidad
+ALTER TABLE public.orders
+ ADD COLUMN IF NOT EXISTS inventory_updated boolean DEFAULT false;
+
+-- Nota: ejecuta este archivo desde la consola SQL de Supabase
+-- o aplica estas sentencias manualmente si ya tienes un proceso de migraciones.
 
