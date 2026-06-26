@@ -314,7 +314,8 @@ function markDelivered(id) {
     o.delivered=true;
     logActivity(state.currentUser.name,'mesero',`Entregó pedido #${o.id} (${o.table})`,'#28A745');
     if (supabaseClient) {
-      supabaseClient.from('orders').update({ delivered: true }).eq('id', id).catch(e => console.error(e));
+      supabaseClient.from('orders').update({ delivered: true }).eq('id', id)
+        .then(({ error }) => { if (error) console.error(error); });
     }
   }
   renderPickupAlerts();
@@ -486,7 +487,8 @@ async function sendOrder() {
       order.items.forEach(oi => {
         const d = state.menu.find(x => x.id === oi.id);
         if (d) {
-          supabaseClient.from('menu').update({ qty: d.qty }).eq('id', d.id).catch(e => console.error("Error updating menu qty:", e));
+          supabaseClient.from('menu').update({ qty: d.qty }).eq('id', d.id)
+            .then(({ error }) => { if (error) console.error("Error updating menu qty:", error); });
         }
       });
     }
@@ -552,7 +554,7 @@ function setOrderStatus(id, status) {
       .from('orders')
       .update({ status: status, inventoryUpdated: o.inventoryUpdated })
       .eq('id', id)
-      .catch(e => console.error("Error al actualizar estado en Supabase:", e));
+      .then(({ error }) => { if (error) console.error("Error al actualizar estado en Supabase:", error); });
   }
 }
 
@@ -568,7 +570,8 @@ function updateInventoryForOrder(order) {
           inv.qty = Math.max(0, inv.qty - (c.qty || 1) * qty);
           logActivity('Sistema','inventario',`Consumió ${ (c.qty||1)*qty } ${inv.unit} de ${inv.name} por pedido #${order.id}`,'#6F42C1');
           if (supabaseClient) {
-            supabaseClient.from('inventory').update({ qty: inv.qty }).eq('id', inv.id).catch(e => console.error(e));
+            supabaseClient.from('inventory').update({ qty: inv.qty }).eq('id', inv.id)
+              .then(({ error }) => { if (error) console.error(error); });
           }
         }
       });
@@ -581,7 +584,8 @@ function updateInventoryForOrder(order) {
         inv.qty = Math.max(0, inv.qty - qty);
         logActivity('Sistema','inventario',`Consumió ${qty} ${inv.unit} de ${inv.name} por pedido #${order.id}`,'#6F42C1');
         if (supabaseClient) {
-          supabaseClient.from('inventory').update({ qty: inv.qty }).eq('id', inv.id).catch(e => console.error(e));
+          supabaseClient.from('inventory').update({ qty: inv.qty }).eq('id', inv.id)
+            .then(({ error }) => { if (error) console.error(error); });
         }
       }
     }
@@ -706,7 +710,8 @@ function markPaid(id) {
     o.payment='paid';
     logActivity(state.currentUser.name,'admin',`Marcó pedido #${o.id} como PAGADO ($${o.total.toLocaleString()})`,'#28A745');
     if (supabaseClient) {
-      supabaseClient.from('orders').update({ payment: 'paid' }).eq('id', id).catch(e => console.error(e));
+      supabaseClient.from('orders').update({ payment: 'paid' }).eq('id', id)
+        .then(({ error }) => { if (error) console.error(error); });
     }
   }
   renderAdminVentas();
@@ -810,7 +815,8 @@ function saveInv() {
     if (inv) {
       Object.assign(inv,{name,qty,unit,min,cat,emoji});
       if (supabaseClient) {
-        supabaseClient.from('inventory').upsert([inv]).catch(e => console.error(e));
+        supabaseClient.from('inventory').upsert([inv])
+          .then(({ error }) => { if (error) console.error(error); });
       }
     }
     showToast('✅ Insumo actualizado','success');
@@ -818,7 +824,8 @@ function saveInv() {
     const newInv = {id:state.nextInvId++,name,qty,unit,min,cat,emoji};
     state.inventory.push(newInv);
     if (supabaseClient) {
-      supabaseClient.from('inventory').insert([newInv]).catch(e => console.error(e));
+      supabaseClient.from('inventory').insert([newInv])
+        .then(({ error }) => { if (error) console.error(error); });
     }
     showToast('✅ Insumo agregado','success');
   }
@@ -830,7 +837,8 @@ function deleteInv(id) {
   if (!confirm('¿Eliminar este insumo?')) return;
   state.inventory=state.inventory.filter(x=>x.id!==id);
   if (supabaseClient) {
-    supabaseClient.from('inventory').delete().eq('id', id).catch(e => console.error(e));
+    supabaseClient.from('inventory').delete().eq('id', id)
+      .then(({ error }) => { if (error) console.error(error); });
   }
   renderInvGrid();
   showToast('🗑️ Eliminado','success');
@@ -889,7 +897,8 @@ function saveTable() {
     if (t) {
       Object.assign(t,{name,cap,zone});
       if (supabaseClient) {
-        supabaseClient.from('tables').upsert([t]).catch(e => console.error(e));
+        supabaseClient.from('tables').upsert([t])
+          .then(({ error }) => { if (error) console.error(error); });
       }
     }
     showToast('✅ Mesa actualizada','success');
@@ -897,7 +906,8 @@ function saveTable() {
     const newTable = {id:state.nextTableId++,name,cap,zone};
     state.tables.push(newTable);
     if (supabaseClient) {
-      supabaseClient.from('tables').insert([newTable]).catch(e => console.error(e));
+      supabaseClient.from('tables').insert([newTable])
+        .then(({ error }) => { if (error) console.error(error); });
     }
     showToast('✅ Mesa agregada','success');
   }
@@ -909,7 +919,8 @@ function deleteTable(id) {
   if (!confirm('¿Eliminar esta mesa?')) return;
   state.tables=state.tables.filter(x=>x.id!==id);
   if (supabaseClient) {
-    supabaseClient.from('tables').delete().eq('id', id).catch(e => console.error(e));
+    supabaseClient.from('tables').delete().eq('id', id)
+      .then(({ error }) => { if (error) console.error(error); });
   }
   renderTablesGrid();
   showToast('🗑️ Mesa eliminada','success');
@@ -1024,7 +1035,8 @@ function saveUser() {
     if (u) {
       Object.assign(u,{name,role,username,pass});
       if (supabaseClient) {
-        supabaseClient.from('users').upsert([u]).catch(e => console.error(e));
+        supabaseClient.from('users').upsert([u])
+          .then(({ error }) => { if (error) console.error(error); });
       }
     }
     logActivity(state.currentUser.name,'admin',`Editó usuario @${username} (${role})`,'#6F42C1');
@@ -1033,7 +1045,8 @@ function saveUser() {
     const newUser = {id:state.nextUserId++,name,role,username,pass};
     state.users.push(newUser);
     if (supabaseClient) {
-      supabaseClient.from('users').insert([newUser]).catch(e => console.error(e));
+      supabaseClient.from('users').insert([newUser])
+        .then(({ error }) => { if (error) console.error(error); });
     }
     logActivity(state.currentUser.name,'admin',`Creó usuario @${username} (${role})`,'#6F42C1');
     showToast('✅ Usuario creado','success');
@@ -1048,7 +1061,8 @@ function deleteUser(id) {
   if (!confirm(`¿Eliminar usuario @${u.username}?`)) return;
   state.users=state.users.filter(x=>x.id!==id);
   if (supabaseClient) {
-    supabaseClient.from('users').delete().eq('id', id).catch(e => console.error(e));
+    supabaseClient.from('users').delete().eq('id', id)
+      .then(({ error }) => { if (error) console.error(error); });
   }
   logActivity(state.currentUser.name,'admin',`Eliminó usuario @${u.username}`,'#DC3545');
   renderUsersGrid();
@@ -1108,7 +1122,8 @@ function saveCategoryEdit(i) {
   showToast('✅ Categoría actualizada','success');
 
   if (supabaseClient) {
-    supabaseClient.from('categories').update({ name: val }).eq('name', oldVal).catch(e => console.error(e));
+    supabaseClient.from('categories').update({ name: val }).eq('name', oldVal)
+      .then(({ error }) => { if (error) console.error(error); });
   }
 }
 
@@ -1124,7 +1139,8 @@ function addCategory() {
   showToast('✅ Categoría agregada','success');
 
   if (supabaseClient) {
-    supabaseClient.from('categories').insert([{ name: val }]).catch(e => console.error(e));
+    supabaseClient.from('categories').insert([{ name: val }])
+      .then(({ error }) => { if (error) console.error(error); });
   }
 }
 
@@ -1138,7 +1154,8 @@ function deleteCategory(i) {
   showToast('🗑️ Categoría eliminada','success');
 
   if (supabaseClient) {
-    supabaseClient.from('categories').delete().eq('name', val).catch(e => console.error(e));
+    supabaseClient.from('categories').delete().eq('name', val)
+      .then(({ error }) => { if (error) console.error(error); });
   }
 }
 
@@ -1238,7 +1255,8 @@ function saveDish() {
     if (d) {
       Object.assign(d,{name,price,qty,cat,desc,emoji,consumes});
       if (supabaseClient) {
-        supabaseClient.from('menu').upsert([d]).catch(e => console.error(e));
+        supabaseClient.from('menu').upsert([d])
+          .then(({ error }) => { if (error) console.error(error); });
       }
     }
     showToast('✅ Plato actualizado','success');
@@ -1246,7 +1264,8 @@ function saveDish() {
     const newDish = {id:state.nextMenuId++,name,price,qty,cat,desc,emoji,consumes};
     state.menu.push(newDish);
     if (supabaseClient) {
-      supabaseClient.from('menu').insert([newDish]).catch(e => console.error(e));
+      supabaseClient.from('menu').insert([newDish])
+        .then(({ error }) => { if (error) console.error(error); });
     }
     showToast('✅ Plato agregado','success');
   }
@@ -1260,7 +1279,8 @@ function deleteDish(id) {
   if (!confirm('¿Eliminar este plato?')) return;
   state.menu=state.menu.filter(x=>x.id!==id);
   if (supabaseClient) {
-    supabaseClient.from('menu').delete().eq('id', id).catch(e => console.error(e));
+    supabaseClient.from('menu').delete().eq('id', id)
+      .then(({ error }) => { if (error) console.error(error); });
   }
   renderAdminMenu();
   renderMenuCards();
