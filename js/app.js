@@ -1540,7 +1540,6 @@ if (typeof window !== 'undefined') {
   window.clearOrder = clearOrder;
   window.sendOrder = sendOrder;
   window.setOrderStatus = setOrderStatus;
-  window.markPaid = markPaid;
   window.adminTab = adminTab;
   window.openInvModal = openInvModal;
   window.saveInv = saveInv;
