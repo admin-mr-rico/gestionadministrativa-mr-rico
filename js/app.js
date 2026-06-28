@@ -216,7 +216,7 @@ function selectRole(btn) {
 }
 
 function doLogin() {
-  const u = document.getElementById('login-user').value.trim();
+  const u = document.getElementById('login-user').value.trim().toLowerCase();
   const p = document.getElementById('login-pass').value;
   const err = document.getElementById('login-error');
 
