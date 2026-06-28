@@ -45,10 +45,12 @@ const state = {
   selectedTable: null,
   activityLog: []
 };
-let adminInvCategorySelected = null;
+let adminInvCategorySelected = '__categories__';
+let kitchenInvCategorySelected = '__categories__';
 
-// Guardamos una copia de los usuarios por defecto para fallback local
+// Guardamos una copia de los usuarios y del menú por defecto para fallback local
 const DEFAULT_USERS = state.users.map(u => ({ ...u }));
+const DEFAULT_MENU = state.menu.map(d => ({ ...d }));
 
 // ──────────────────────────────────────────────────
 // Supabase integration (basic)
@@ -656,16 +658,52 @@ function updateInventoryForOrder(order) {
 }
 
 function renderKitchenInventory() {
+  const nav = document.getElementById('kitchen-inv-category-nav');
   const el = document.getElementById('kitchen-inventory');
-  el.innerHTML = state.inventory.map(inv=>{
+  const categories = [...new Set(state.inventory.map(i=>i.cat).filter(Boolean))].sort();
+
+  if (nav) {
+    nav.innerHTML = `<button class="btn-sm ${kitchenInvCategorySelected==='__categories__' ? 'btn-primary' : ''}" onclick="selectKitchenInvCategory('__categories__')">Categorías</button>` +
+      `<button class="btn-sm ${kitchenInvCategorySelected==='all' ? 'btn-primary' : ''}" onclick="selectKitchenInvCategory('all')">Ver todo</button>` +
+      categories.map(c=>`<button class="btn-sm ${kitchenInvCategorySelected===c ? 'btn-primary' : ''}" onclick="selectKitchenInvCategory('${c}')">${c}</button>`).join('');
+  }
+
+  if (kitchenInvCategorySelected === '__categories__') {
+    if (!categories.length) {
+      el.innerHTML = `<div class="empty-state"><div class="icon">📦</div><p>No hay categorías de inventario</p></div>`;
+      return;
+    }
+    el.innerHTML = categories.map(c => {
+      const count = state.inventory.filter(i => i.cat===c).length;
+      return `<div class="inv-card" style="cursor:pointer;" onclick="selectKitchenInvCategory('${c}')">
+        <div style="font-size:24px;">📁</div>
+        <div style="font-weight:700;margin-top:10px;">${c}</div>
+        <div style="color:var(--gray-500);margin-top:6px;">${count} insumo${count===1?'':'s'}</div>
+      </div>`;
+    }).join('');
+    return;
+  }
+
+  const items = kitchenInvCategorySelected === 'all'
+    ? state.inventory
+    : state.inventory.filter(i => i.cat === kitchenInvCategorySelected);
+
+  if (!items.length) {
+    el.innerHTML = `<div class="empty-state"><div class="icon">📦</div><p>No hay insumos${kitchenInvCategorySelected==='all' ? '' : ' en esta categoría'}</p></div>`;
+    return;
+  }
+
+  el.innerHTML = items.map(inv => {
     const pct = Math.min(100, Math.round((inv.qty/Math.max(inv.qty,inv.min*2))*100));
     const color = inv.qty>inv.min ? 'var(--green)' : inv.qty>0 ? 'var(--yellow)' : 'var(--red)';
-    return `<div style="background:var(--gray-50);border-radius:8px;padding:10px 12px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <span style="font-size:12px;font-weight:600;">${inv.emoji} ${inv.name}</span>
-        <span style="font-size:13px;font-weight:800;color:${color};">${inv.qty} ${inv.unit}</span>
+    const label = inv.qty>inv.min ? 'OK' : inv.qty>0 ? 'Bajo' : 'Agotado';
+    return `<div style="background:var(--gray-50);border-radius:10px;padding:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <div><strong>${inv.emoji} ${inv.name}</strong><div style="font-size:12px;color:var(--gray-500);">${inv.cat}</div></div>
+        <div style="text-align:right;color:${color};font-weight:800;">${inv.qty} ${inv.unit}</div>
       </div>
       <div class="inv-bar"><div class="inv-bar-fill" style="width:${pct}%;background:${color};"></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--gray-500);margin-top:8px;"><span>Mínimo ${inv.min}</span><span>${label}</span></div>
     </div>`;
   }).join('');
 }
@@ -701,8 +739,8 @@ function renderAdminVentas() {
   const dishCount = {};
   state.menu.forEach(d=>dishCount[d.name]=0);
   tod.forEach(o=>o.items.forEach(i=>{ dishCount[i.name] = (dishCount[i.name]||0) + i.qty; }));
-  const top = Object.entries(dishCount).sort((a,b)=>b[1]-a[1])[0];
-  const least = Object.entries(dishCount).sort((a,b)=>a[1]-b[1])[0];
+  const top = tod.length ? Object.entries(dishCount).sort((a,b)=>b[1]-a[1])[0] : null;
+  const least = tod.length ? Object.entries(dishCount).sort((a,b)=>a[1]-b[1])[0] : null;
 
   const pendingPayments = tod.filter(o=>o.payment==='pending').length;
   const lowInv = state.inventory.filter(inv=>inv.qty<=inv.min).length;
@@ -772,25 +810,33 @@ function playAlertSound(type) {
   if (!window.AudioContext && !window.webkitAudioContext) return;
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   const ctx = new AudioCtx();
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.connect(gain);
-  gain.connect(ctx.destination);
+  const masterGain = ctx.createGain();
+  masterGain.gain.value = 0.3;
+  masterGain.connect(ctx.destination);
+
+  const makeTone = (freq, duration) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.value = freq;
+    gain.gain.value = 0.18;
+    osc.connect(gain);
+    gain.connect(masterGain);
+    osc.start();
+    osc.stop(ctx.currentTime + duration);
+  };
+
   if (type === 'kitchen') {
-    osc.frequency.value = 440;
-    gain.gain.value = 0.12;
-    osc.start();
-    osc.stop(ctx.currentTime + 0.18);
+    makeTone(880, 0.18);
+    makeTone(660, 0.14);
+    makeTone(1040, 0.1);
   } else if (type === 'ready') {
-    osc.frequency.value = 660;
-    gain.gain.value = 0.1;
-    osc.start();
-    osc.stop(ctx.currentTime + 0.18);
+    makeTone(880, 0.22);
+    makeTone(1040, 0.16);
+    makeTone(760, 0.12);
   } else {
-    osc.frequency.value = 520;
-    gain.gain.value = 0.1;
-    osc.start();
-    osc.stop(ctx.currentTime + 0.14);
+    makeTone(740, 0.18);
+    makeTone(980, 0.12);
   }
 }
 
@@ -846,12 +892,29 @@ function renderInvGrid() {
   const categories = [...new Set(state.inventory.map(i=>i.cat).filter(Boolean))].sort();
   const categoryNav = document.getElementById('inv-category-nav');
   if (categoryNav) {
-    categoryNav.innerHTML = `<button class="btn-sm ${adminInvCategorySelected===null ? 'btn-primary' : ''}" onclick="selectInvCategory(null)">Todas</button>` + categories.map(c=>`<button class="btn-sm ${adminInvCategorySelected===c ? 'btn-primary' : ''}" onclick="selectInvCategory('${c}')">${c}</button>`).join('');
+    categoryNav.innerHTML = `<button class="btn-sm ${adminInvCategorySelected==='__categories__' ? 'btn-primary' : ''}" onclick="selectInvCategory('__categories__')">Categorías</button>` +
+      `<button class="btn-sm ${adminInvCategorySelected==='all' ? 'btn-primary' : ''}" onclick="selectInvCategory('all')">Ver todo</button>` +
+      categories.map(c=>`<button class="btn-sm ${adminInvCategorySelected===c ? 'btn-primary' : ''}" onclick="selectInvCategory('${c}')">${c}</button>`).join('');
   }
-  let items = state.inventory;
-  if (adminInvCategorySelected) items = state.inventory.filter(i=>i.cat===adminInvCategorySelected);
+
   if (!state.inventory.length) { grid.innerHTML=`<div class="empty-state"><div class="icon">📦</div><p>Sin insumos</p></div>`; return; }
-  if (!items.length) { grid.innerHTML=`<div class="empty-state"><div class="icon">📦</div><p>No hay insumos en esta categoría</p></div>`; return; }
+
+  if (adminInvCategorySelected === '__categories__') {
+    if (!categories.length) { grid.innerHTML=`<div class="empty-state"><div class="icon">📦</div><p>No hay categorías</p></div>`; return; }
+    grid.innerHTML = categories.map(c => {
+      const count = state.inventory.filter(i => i.cat===c).length;
+      return `<div class="inv-card" style="cursor:pointer;flex-direction:column;align-items:stretch;gap:12px;" onclick="selectInvCategory('${c}')">
+        <div style="font-size:28px;">📁</div>
+        <div style="font-size:18px;font-weight:700;">${c}</div>
+        <div style="color:var(--gray-500);">${count} insumo${count===1?'':'s'}</div>
+      </div>`;
+    }).join('');
+    return;
+  }
+
+  let items = state.inventory;
+  if (adminInvCategorySelected !== 'all') items = state.inventory.filter(i=>i.cat===adminInvCategorySelected);
+  if (!items.length) { grid.innerHTML=`<div class="empty-state"><div class="icon">📦</div><p>No hay insumos${adminInvCategorySelected==='all' ? '' : ' en esta categoría'}</p></div>`; return; }
   grid.innerHTML = items.map(inv=>{
     const pct = Math.min(100, Math.round((inv.qty/Math.max(inv.qty,inv.min*2))*100));
     const color = inv.qty>inv.min ? 'var(--green)' : inv.qty>0 ? 'var(--yellow)' : 'var(--red)';
@@ -940,13 +1003,24 @@ function selectInvCategory(cat) {
   renderInvGrid();
 }
 
+function selectKitchenInvCategory(cat) {
+  kitchenInvCategorySelected = cat;
+  renderKitchenInventory();
+}
+
 function resetEndOfDay() {
   if (!confirm('¿Reiniciar datos del día? Esto eliminará pedidos y actividad de hoy.')) return;
   const today = new Date().toLocaleDateString('es-CO');
+  const todayOrders = state.orders.filter(o => o.date === today);
   state.orders = state.orders.filter(o => o.date !== today);
+  state.nextOrderId = state.orders.length ? Math.max(...state.orders.map(x=>x.id)) + 1 : 1;
   state.activityLog = [];
   state.currentOrder = [];
   state.selectedTable = null;
+  state.nextTableId = state.tables.length ? Math.max(...state.tables.map(x=>x.id)) + 1 : 1;
+  state.menu = DEFAULT_MENU.map(d => ({ ...d }));
+  kitchenInvCategorySelected = '__categories__';
+  adminInvCategorySelected = '__categories__';
   if (supabaseClient) {
     supabaseClient.from('orders').delete().eq('date', today)
       .then(({ error }) => { if (error) console.error('Error borrando pedidos de hoy:', error); });
@@ -957,7 +1031,11 @@ function resetEndOfDay() {
   renderTablesGrid();
   renderMenuCards();
   renderPickupAlerts();
-  showToast('🔄 Datos del día reiniciados','success');
+  renderKitchenInventory();
+  renderInvGrid();
+  if (document.getElementById('screen-cocina').classList.contains('active')) renderKitchen();
+  if (document.getElementById('screen-mesero').classList.contains('active')) renderPickupAlerts();
+  showToast(todayOrders.length ? '🔄 Datos del día reiniciados' : 'ℹ️ No había pedidos de hoy para reiniciar','success');
 }
 
 function deleteInv(id) {
@@ -1563,6 +1641,7 @@ if (typeof window !== 'undefined') {
   window.confirmPayment = confirmPayment;
   window.cajaTab = cajaTab;
   window.selectInvCategory = selectInvCategory;
+  window.selectKitchenInvCategory = selectKitchenInvCategory;
   window.resetEndOfDay = resetEndOfDay;
   window.closeModal = closeModal;
   window.addConsumeRow = addConsumeRow;
