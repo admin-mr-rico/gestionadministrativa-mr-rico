@@ -25,6 +25,8 @@
             class="icon">🧑‍🍽️</span><span>Mesero</span></button>
         <button class="role-btn" data-role="cocina" onclick="selectRole(this)"><span
             class="icon">👨‍🍳</span><span>Cocina</span></button>
+        <button class="role-btn" data-role="caja" onclick="selectRole(this)"><span
+            class="icon">💼</span><span>Caja</span></button>
         <button class="role-btn" data-role="admin" onclick="selectRole(this)"><span
             class="icon">📊</span><span>Admin</span></button>
       </div>
@@ -209,6 +211,9 @@
               <div class="stat-label">Menos Vendido</div>
             </div>
           </div>
+          <div style="display:flex;justify-content:flex-end;margin-bottom:16px;">
+            <button class="btn-sm btn-delete" onclick="resetEndOfDay()">🔄 Reiniciar Día</button>
+          </div>
           <div class="grid-2" style="margin-bottom:16px;">
             <div class="card">
               <div class="card-title">📦 Insumos bajos</div>
@@ -266,6 +271,7 @@
             <button class="btn-primary" style="width:auto;padding:10px 20px;" onclick="openInvModal()">+ Agregar
               Insumo</button>
           </div>
+          <div id="inv-category-nav" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;"></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;" id="inv-grid">
           </div>
         </div>
@@ -340,6 +346,96 @@
         </div>
 
       </div><!-- /screen-admin -->
+
+      <div class="screen" id="screen-caja">
+        <div class="screen-title">Caja 💼</div>
+        <div class="screen-subtitle">Control de cobros y cierre de caja</div>
+        <div class="tab-bar">
+          <button class="tab active" onclick="cajaTab('ventas',this)">📈 Ventas</button>
+          <button class="tab" onclick="cajaTab('mesas',this)">🪑 Mesas</button>
+          <button class="tab" onclick="cajaTab('historial',this)">📋 Historial</button>
+        </div>
+
+        <div id="caja-tab-ventas">
+          <div class="grid-4" style="margin-bottom:20px;">
+            <div class="stat-card">
+              <div class="stat-icon">💰</div>
+              <div class="stat-value" id="c-total-sales">$0</div>
+              <div class="stat-label">Ventas Hoy</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">🧾</div>
+              <div class="stat-value" id="c-total-orders">0</div>
+              <div class="stat-label">Pedidos Hoy</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">💳</div>
+              <div class="stat-value" id="c-pending-payments">0</div>
+              <div class="stat-label">Pagos Pendientes</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">🏆</div>
+              <div class="stat-value" id="c-top-dish">–</div>
+              <div class="stat-label">Más Vendido</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">Pedidos de hoy</div>
+            <div class="card-sub">Registra pagos en efectivo o transferencia</div>
+            <div style="overflow-x:auto;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Mesa</th>
+                    <th>Mesero</th>
+                    <th>Platos</th>
+                    <th>Total</th>
+                    <th>Estado</th>
+                    <th>Pago</th>
+                    <th>Hora</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="caja-sales-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="caja-tab-mesas" style="display:none;">
+          <div class="header-bar">
+            <div><strong style="font-size:16px;">Gestión de Mesas</strong><br><small style="color:var(--gray-400);">Mesas activas y pendientes de cobro</small></div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;" id="caja-tables-grid"></div>
+        </div>
+
+        <div id="caja-tab-historial" style="display:none;">
+          <div class="card">
+            <div class="card-title">Historial de Caja</div>
+            <div class="card-sub">Pedidos y cobros registrados</div>
+            <div style="overflow-x:auto;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Mesa</th>
+                    <th>Mesero</th>
+                    <th>Detalle</th>
+                    <th>Notas</th>
+                    <th>Total</th>
+                    <th>Cocina</th>
+                    <th>Pago</th>
+                    <th>Hora</th>
+                  </tr>
+                </thead>
+                <tbody id="caja-history-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </main>
   </div>
 
@@ -476,6 +572,25 @@
         <button class="btn-primary" onclick="addCategory()">Agregar</button>
       </div>
       <div id="cat-list"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="payment-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">Registrar Pago</div><button class="btn-close" onclick="closeModal('payment-modal')">✕</button>
+      </div>
+      <input type="hidden" id="payment-order-id">
+      <div class="form-group"><label>Forma de Pago</label>
+        <select class="form-control" id="payment-method">
+          <option value="efectivo">Efectivo</option>
+          <option value="transferencia">Transferencia</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:6px;">
+        <button class="btn-primary" onclick="confirmPayment()">Guardar</button>
+        <button class="btn-secondary" onclick="closeModal('payment-modal')">Cancelar</button>
+      </div>
     </div>
   </div>
 

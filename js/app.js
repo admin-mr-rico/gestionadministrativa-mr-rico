@@ -6,9 +6,10 @@ const state = {
   users: [
     { id: 1, name: 'Administrador', username: 'admin', pass: '1234', role: 'admin' },
     { id: 2, name: 'Mesero Demo',   username: 'mesero', pass: '1234', role: 'mesero' },
-    { id: 3, name: 'Cocinero Demo', username: 'cocina', pass: '1234', role: 'cocina' }
+    { id: 3, name: 'Cocinero Demo', username: 'cocina', pass: '1234', role: 'cocina' },
+    { id: 4, name: 'Caja Demo',     username: 'caja', pass: '1234', role: 'caja' }
   ],
-  nextUserId: 4,
+  nextUserId: 5,
   categories: ['Entradas','Platos Fuertes','Sopas','Ensaladas','Bebidas','Postres','Especiales'],
   menu: [
     { id:1, name:'Bandeja Paisa', price:28000, qty:15, cat:'Platos Fuertes', desc:'Fríjoles, chicharrón, carne molida, chorizo, morcilla, arroz, huevo, aguacate y arepa.', emoji:'🍱' },
@@ -44,6 +45,7 @@ const state = {
   selectedTable: null,
   activityLog: []
 };
+let adminInvCategorySelected = null;
 
 // Guardamos una copia de los usuarios por defecto para fallback local
 const DEFAULT_USERS = state.users.map(u => ({ ...u }));
@@ -241,15 +243,41 @@ function doLogin() {
   if (!user) { err.style.display='block'; return; }
   err.style.display='none';
   state.currentUser = user;
+  saveSession();
 
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='flex';
   document.getElementById('header-user-badge').textContent = user.name;
-  const labels = { mesero:'· Mesero', cocina:'· Cocina', admin:'· Administración' };
-  document.getElementById('header-role-label').textContent = labels[user.role];
+  const labels = { mesero:'· Mesero', cocina:'· Cocina', admin:'· Administración', caja:'· Caja' };
+  document.getElementById('header-role-label').textContent = labels[user.role] || '';
 
   logActivity(user.name, user.role, 'Inició sesión', '#FF6B1A');
   activateScreen(user.role);
+}
+
+function saveSession() {
+  if (!state.currentUser) return;
+  localStorage.setItem('mr-rico-session', JSON.stringify({ username: state.currentUser.username, role: state.currentUser.role }));
+}
+
+function restoreSession() {
+  try {
+    const saved = localStorage.getItem('mr-rico-session');
+    if (!saved) return;
+    const payload = JSON.parse(saved);
+    if (!payload || !payload.username || !payload.role) return;
+    const storedUser = state.users.find(x => x.role === payload.role && x.username === payload.username) || DEFAULT_USERS.find(x => x.role === payload.role && x.username === payload.username);
+    if (!storedUser) return;
+    state.currentUser = storedUser;
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app').style.display='flex';
+    document.getElementById('header-user-badge').textContent = storedUser.name;
+    const labels = { mesero:'· Mesero', cocina:'· Cocina', admin:'· Administración', caja:'· Caja' };
+    document.getElementById('header-role-label').textContent = labels[storedUser.role] || '';
+    activateScreen(storedUser.role);
+  } catch (e) {
+    console.error('Error restaurando sesión:', e);
+  }
 }
 
 function doLogout() {
@@ -257,6 +285,7 @@ function doLogout() {
   state.currentUser = null;
   state.currentOrder = [];
   state.selectedTable = null;
+  localStorage.removeItem('mr-rico-session');
   document.getElementById('login-user').value='';
   document.getElementById('login-pass').value='';
   document.getElementById('app').style.display='none';
@@ -264,6 +293,7 @@ function doLogout() {
 }
 
 document.getElementById('login-pass').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+window.addEventListener('load', () => { restoreSession(); if (window.history && 'scrollRestoration' in window.history) window.history.scrollRestoration = 'manual'; });
 
 // ═══════════════════════════════════════════
 //  ROUTING
@@ -285,6 +315,9 @@ function activateScreen(role) {
     document.getElementById('screen-admin').classList.add('active');
     renderAdminVentas();
     renderAdminMenu();
+  } else if (role === 'caja') {
+    document.getElementById('screen-caja').classList.add('active');
+    cajaTab('ventas', document.querySelector('#screen-caja .tab'));
   }
 }
 
@@ -294,6 +327,11 @@ function activateScreen(role) {
 function renderPickupAlerts() {
   const readyOrders = state.orders.filter(o => o.status === 'done' && !o.delivered);
   const sec = document.getElementById('pickup-section');
+  if (state.currentUser?.role === 'mesero') {
+    const prev = window._lastReadyOrdersCount || 0;
+    if (readyOrders.length > prev) playAlertSound('ready');
+    window._lastReadyOrdersCount = readyOrders.length;
+  }
   if (!readyOrders.length) { sec.style.display='none'; return; }
   sec.style.display='block';
   sec.innerHTML = `<div class="pickup-banner">
@@ -485,6 +523,7 @@ async function sendOrder() {
   renderTableBtns();
   renderOrderPanel();
   renderMenuCards();
+  playAlertSound('kitchen');
 
   // Enviar directamente a la base de datos en la nube
   if (supabaseClient) {
@@ -562,6 +601,9 @@ function setOrderStatus(id, status) {
     updateInventoryForOrder(o);
   }
   renderKitchen();
+  if (status === 'done') {
+    window._lastReadyOrdersCount = (window._lastReadyOrdersCount || 0) + 1;
+  }
   showToast(status==='done'?'✅ Pedido listo – mesero notificado':'🔥 Preparando pedido', 'success');
 
   // Guardar en Supabase de forma inmediata
@@ -714,25 +756,61 @@ function renderAdminVentas() {
       </td>
       <td style="color:var(--gray-400);font-size:12px;">${o.time}</td>
       <td>
-        ${o.payment!=='paid'?`<button class="btn-sm btn-green" onclick="markPaid(${o.id})">Marcar Pagado</button>`:''}
+        ${o.payment!=='paid'?`<button class="btn-sm btn-green" onclick="openPaymentModal(${o.id})">Cobrar</button>`:''}
       </td>
     </tr>`;
   }).join('');
 }
 
-function markPaid(id) {
-  const o = state.orders.find(x=>x.id===id);
-  if (o) {
-    o.payment='paid';
-    logActivity(state.currentUser.name,'admin',`Marcó pedido #${o.id} como PAGADO ($${o.total.toLocaleString()})`,'#28A745');
-    if (supabaseClient) {
-      supabaseClient.from('orders').update({ payment: 'paid' }).eq('id', id)
-        .then(({ error }) => { if (error) console.error(error); });
-    }
+function openPaymentModal(id) {
+  document.getElementById('payment-order-id').value = id;
+  document.getElementById('payment-method').value = 'efectivo';
+  document.getElementById('payment-modal').classList.add('open');
+}
+
+function playAlertSound(type) {
+  if (!window.AudioContext && !window.webkitAudioContext) return;
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const ctx = new AudioCtx();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  if (type === 'kitchen') {
+    osc.frequency.value = 440;
+    gain.gain.value = 0.12;
+    osc.start();
+    osc.stop(ctx.currentTime + 0.18);
+  } else if (type === 'ready') {
+    osc.frequency.value = 660;
+    gain.gain.value = 0.1;
+    osc.start();
+    osc.stop(ctx.currentTime + 0.18);
+  } else {
+    osc.frequency.value = 520;
+    gain.gain.value = 0.1;
+    osc.start();
+    osc.stop(ctx.currentTime + 0.14);
   }
+}
+
+function confirmPayment() {
+  const id = parseInt(document.getElementById('payment-order-id').value);
+  const method = document.getElementById('payment-method').value;
+  const o = state.orders.find(x=>x.id===id);
+  if (!o) return;
+  o.payment = 'paid';
+  o.payment_method = method;
+  logActivity(state.currentUser.name, state.currentUser.role, `Registró pago ${method==='efectivo'?'Efectivo':'Transferencia'} para pedido #${o.id}`,'#28A745');
+  if (supabaseClient) {
+    supabaseClient.from('orders').update({ payment: 'paid', payment_method: method }).eq('id', id)
+      .then(({ error }) => { if (error) console.error(error); });
+  }
+  closeModal('payment-modal');
   renderAdminVentas();
+  renderCajaVentas();
   renderTablesGrid();
-  showToast('💰 Pedido marcado como pagado', 'success');
+  showToast('💰 Pago registrado','success');
 }
 
 // ═══════════════════════════════════════════
@@ -765,8 +843,16 @@ function renderAdminMenu() {
 // ═══════════════════════════════════════════
 function renderInvGrid() {
   const grid = document.getElementById('inv-grid');
+  const categories = [...new Set(state.inventory.map(i=>i.cat).filter(Boolean))].sort();
+  const categoryNav = document.getElementById('inv-category-nav');
+  if (categoryNav) {
+    categoryNav.innerHTML = `<button class="btn-sm ${adminInvCategorySelected===null ? 'btn-primary' : ''}" onclick="selectInvCategory(null)">Todas</button>` + categories.map(c=>`<button class="btn-sm ${adminInvCategorySelected===c ? 'btn-primary' : ''}" onclick="selectInvCategory('${c}')">${c}</button>`).join('');
+  }
+  let items = state.inventory;
+  if (adminInvCategorySelected) items = state.inventory.filter(i=>i.cat===adminInvCategorySelected);
   if (!state.inventory.length) { grid.innerHTML=`<div class="empty-state"><div class="icon">📦</div><p>Sin insumos</p></div>`; return; }
-  grid.innerHTML = state.inventory.map(inv=>{
+  if (!items.length) { grid.innerHTML=`<div class="empty-state"><div class="icon">📦</div><p>No hay insumos en esta categoría</p></div>`; return; }
+  grid.innerHTML = items.map(inv=>{
     const pct = Math.min(100, Math.round((inv.qty/Math.max(inv.qty,inv.min*2))*100));
     const color = inv.qty>inv.min ? 'var(--green)' : inv.qty>0 ? 'var(--yellow)' : 'var(--red)';
     const label = inv.qty>inv.min ? 'OK' : inv.qty>0 ? 'Bajo' : 'Agotado';
@@ -847,6 +933,31 @@ function saveInv() {
   }
   closeModal('inv-modal');
   renderInvGrid();
+}
+
+function selectInvCategory(cat) {
+  adminInvCategorySelected = cat;
+  renderInvGrid();
+}
+
+function resetEndOfDay() {
+  if (!confirm('¿Reiniciar datos del día? Esto eliminará pedidos y actividad de hoy.')) return;
+  const today = new Date().toLocaleDateString('es-CO');
+  state.orders = state.orders.filter(o => o.date !== today);
+  state.activityLog = [];
+  state.currentOrder = [];
+  state.selectedTable = null;
+  if (supabaseClient) {
+    supabaseClient.from('orders').delete().eq('date', today)
+      .then(({ error }) => { if (error) console.error('Error borrando pedidos de hoy:', error); });
+  }
+  renderAdminVentas();
+  renderHistorial();
+  renderPersonnel();
+  renderTablesGrid();
+  renderMenuCards();
+  renderPickupAlerts();
+  showToast('🔄 Datos del día reiniciados','success');
 }
 
 function deleteInv(id) {
@@ -1203,7 +1314,95 @@ function addConsumeRow(invId, qty) {
 }
 
 // ═══════════════════════════════════════════
-//  ADMIN – HISTORIAL
+function cajaTab(tab, btn) {
+  document.querySelectorAll('#screen-caja .tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  ['ventas','mesas','historial'].forEach(t=>{
+    const el = document.getElementById('caja-tab-'+t);
+    if (el) el.style.display = t===tab ? '' : 'none';
+  });
+  if (tab==='ventas') renderCajaVentas();
+  if (tab==='mesas') renderCajaTables();
+  if (tab==='historial') renderCajaHistory();
+}
+
+function renderCajaVentas() {
+  const today = new Date().toLocaleDateString('es-CO');
+  const tod = state.orders.filter(o=>o.date===today);
+  const total = tod.reduce((s,o)=>s+o.total,0);
+  const dishCount = {};
+  state.menu.forEach(d=>dishCount[d.name]=0);
+  tod.forEach(o=>o.items.forEach(i=>{ dishCount[i.name] = (dishCount[i.name]||0) + i.qty; }));
+  const top = Object.entries(dishCount).sort((a,b)=>b[1]-a[1])[0];
+  const pendingPayments = tod.filter(o=>o.payment==='pending').length;
+  document.getElementById('c-total-sales').textContent = '$'+total.toLocaleString();
+  document.getElementById('c-total-orders').textContent = tod.length;
+  document.getElementById('c-pending-payments').textContent = pendingPayments;
+  document.getElementById('c-top-dish').textContent = top ? top[0] : '–';
+  const tbody=document.getElementById('caja-sales-tbody');
+  if (!tod.length) { tbody.innerHTML=`<tr><td colspan="9" style="text-align:center;color:var(--gray-400);padding:32px;">Sin pedidos hoy</td></tr>`; return; }
+  const sColor={pending:'#FFF8E1',preparing:'#FFF0E8',done:'#E8F5E9'};
+  const sText={pending:'⏳ Pendiente',preparing:'🔥 Preparando',done:'✅ Listo'};
+  tbody.innerHTML=[...tod].reverse().map(o=>{
+    const itemsHtml = `<ul style="list-style:none;padding:0;margin:0;">${o.items.map(i=>{
+      const unitPrice = i.price || (state.menu.find(m=>m.id===i.id)||{}).price || 0;
+      const subtotal = unitPrice * i.qty;
+      return `<li style="padding:4px 0;">${i.qty}× ${i.name} — <small style="color:var(--gray-400);">$${unitPrice.toLocaleString()} c/u</small> <strong style="margin-left:8px;">$${subtotal.toLocaleString()}</strong></li>`;
+    }).join('')}</ul>`;
+    return `
+    <tr>
+      <td><strong>#${o.id}</strong></td>
+      <td>${o.table}</td>
+      <td>${o.waiter}</td>
+      <td style="font-size:12px;">${itemsHtml}</td>
+      <td><strong style="color:var(--orange);">$${o.total.toLocaleString()}</strong></td>
+      <td><span class="badge" style="background:${sColor[o.status]};color:var(--gray-800);">${sText[o.status]}</span></td>
+      <td><span class="badge ${o.payment==='paid'?'pay-paid':'pay-pending'}">${o.payment==='paid'?'✅ '+(o.payment_method==='transferencia'?'Transferencia':'Efectivo'):'⏳ Pendiente'}</span></td>
+      <td style="color:var(--gray-400);font-size:12px;">${o.time}</td>
+      <td>${o.payment!=='paid'?`<button class="btn-sm btn-green" onclick="openPaymentModal(${o.id})">Cobrar</button>`:''}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderCajaTables() {
+  const grid = document.getElementById('caja-tables-grid');
+  if (!state.tables.length) { grid.innerHTML=`<div class="empty-state"><div class="icon">🪑</div><p>Sin mesas</p></div>`; return; }
+  grid.innerHTML = state.tables.map(t=>{
+    const active = state.orders.filter(o=>o.table===t.name && o.payment !== 'paid');
+    const occupied = active.length>0;
+    const waiters = [...new Set(active.map(a=>a.waiter))].join(', ');
+    const ordersList = active.map(a=>`#${a.id}`).join(', ');
+    return `
+    <div class="card" style="text-align:center;">
+      <div style="font-size:36px;margin-bottom:8px;">🪑</div>
+      <div style="font-size:16px;font-weight:800;color:var(--gray-800);">${t.name} ${occupied?`<div style="margin-top:6px;"><span class="badge" style="background:#FFF0E8;color:var(--orange);">Ocupada</span></div>`:''}</div>
+      <div style="font-size:12px;color:var(--gray-400);margin:4px 0;">${t.zone}</div>
+      ${t.cap>0?`<div style="font-size:12px;color:var(--orange);font-weight:600;">${t.cap} personas</div>`:''}
+      ${occupied?`<div style="font-size:12px;color:var(--gray-600);margin-top:8px;">Mesero(s): <strong>${waiters}</strong><br>Pedidos: ${ordersList}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function renderCajaHistory() {
+  const tbody=document.getElementById('caja-history-tbody');
+  if (!state.orders.length) { tbody.innerHTML=`<tr><td colspan="9" style="text-align:center;color:var(--gray-400);padding:32px;">Sin pedidos</td></tr>`; return; }
+  const sColor={pending:'#FFF8E1',preparing:'#FFF0E8',done:'#E8F5E9'};
+  const sText={pending:'⏳ Pendiente',preparing:'🔥 Preparando',done:'✅ Listo'};
+  tbody.innerHTML=[...state.orders].reverse().map(o=>`
+    <tr>
+      <td><strong>#${o.id}</strong></td>
+      <td>${o.table}</td>
+      <td style="font-size:12px;">${o.waiter}</td>
+      <td style="font-size:12px;">${o.items.map(i=>`${i.qty}× ${i.name}`).join('<br>')}</td>
+      <td style="font-size:12px;color:var(--gray-400);">${o.notes||'–'}</td>
+      <td><strong style="color:var(--orange);">$${o.total.toLocaleString()}</strong></td>
+      <td><span class="badge" style="background:${sColor[o.status]};color:var(--gray-800);">${sText[o.status]}</span></td>
+      <td><span class="badge ${o.payment==='paid'?'pay-paid':'pay-pending'}">${o.payment==='paid'?'✅ '+(o.payment_method==='transferencia'?'Transferencia':'Efectivo'):'⏳ Pendiente'}</span></td>
+      <td style="color:var(--gray-400);font-size:11px;">${o.date}<br>${o.time}</td>
+    </tr>`).join('');
+}
+
+// ═══════════════════════════════════════════
 // ═══════════════════════════════════════════
 function renderHistorial() {
   const tbody=document.getElementById('history-tbody');
@@ -1361,6 +1560,11 @@ if (typeof window !== 'undefined') {
   window.openMenuModal = openMenuModal;
   window.saveDish = saveDish;
   window.deleteDish = deleteDish;
+  window.openPaymentModal = openPaymentModal;
+  window.confirmPayment = confirmPayment;
+  window.cajaTab = cajaTab;
+  window.selectInvCategory = selectInvCategory;
+  window.resetEndOfDay = resetEndOfDay;
   window.closeModal = closeModal;
   window.addConsumeRow = addConsumeRow;
 }
