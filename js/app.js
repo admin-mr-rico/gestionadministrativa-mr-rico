@@ -77,20 +77,22 @@ if (SUPABASE_URL && SUPABASE_ANON_KEY) {
 
 async function initSupabase() {
   await loadInitialState();
-  
+  attemptRestoreSession();
   activarListenersTiempoReal();
 }
 
 async function loadInitialState() {
   if (!supabaseClient) return;
   try {
-    await loadMenu();
-    await loadInventory();
-    await loadUsers();
-    await loadTables();
-    await loadOrders();
-    await loadActivityLog();
-    await loadCategories();
+    await Promise.all([
+      loadMenu(),
+      loadInventory(),
+      loadUsers(),
+      loadTables(),
+      loadOrders(),
+      loadActivityLog(),
+      loadCategories()
+    ]);
 
     // Hacemos sembrado inicial (seed) sólo de lo que falte en Supabase
     await checkAndSeedDatabase();
@@ -294,8 +296,13 @@ function doLogout() {
   document.getElementById('login-screen').style.display='flex';
 }
 
+function attemptRestoreSession() {
+  if (state.currentUser) return; // ya hay sesión activa (login manual o restauración previa)
+  restoreSession();
+}
+
 document.getElementById('login-pass').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
-window.addEventListener('load', () => { restoreSession(); if (window.history && 'scrollRestoration' in window.history) window.history.scrollRestoration = 'manual'; });
+window.addEventListener('load', () => { attemptRestoreSession(); if (window.history && 'scrollRestoration' in window.history) window.history.scrollRestoration = 'manual'; });
 
 // ═══════════════════════════════════════════
 //  ROUTING
@@ -674,11 +681,9 @@ function renderKitchenInventory() {
       return;
     }
     el.innerHTML = categories.map(c => {
-      const count = state.inventory.filter(i => i.cat===c).length;
       return `<div class="inv-card" style="cursor:pointer;" onclick="selectKitchenInvCategory('${c}')">
         <div style="font-size:24px;">📁</div>
         <div style="font-weight:700;margin-top:10px;">${c}</div>
-        <div style="color:var(--gray-500);margin-top:6px;">${count} insumo${count===1?'':'s'}</div>
       </div>`;
     }).join('');
     return;
@@ -902,11 +907,9 @@ function renderInvGrid() {
   if (adminInvCategorySelected === '__categories__') {
     if (!categories.length) { grid.innerHTML=`<div class="empty-state"><div class="icon">📦</div><p>No hay categorías</p></div>`; return; }
     grid.innerHTML = categories.map(c => {
-      const count = state.inventory.filter(i => i.cat===c).length;
       return `<div class="inv-card" style="cursor:pointer;flex-direction:column;align-items:stretch;gap:12px;" onclick="selectInvCategory('${c}')">
         <div style="font-size:28px;">📁</div>
         <div style="font-size:18px;font-weight:700;">${c}</div>
-        <div style="color:var(--gray-500);">${count} insumo${count===1?'':'s'}</div>
       </div>`;
     }).join('');
     return;
@@ -1696,6 +1699,10 @@ function refreshUIForTable(table) {
       renderHistorial();
       renderTablesGrid();
       renderPersonnel();
+    } else if (role === 'caja') {
+      renderCajaVentas();
+      renderCajaTables();
+      renderCajaHistory();
     }
   } else if (table === 'menu') {
     if (role === 'mesero') {
@@ -1715,6 +1722,8 @@ function refreshUIForTable(table) {
       renderTableBtns();
     } else if (role === 'admin') {
       renderTablesGrid();
+    } else if (role === 'caja') {
+      renderCajaTables();
     }
   } else if (table === 'users') {
     if (role === 'admin') {
