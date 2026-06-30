@@ -1014,16 +1014,17 @@ function resetEndOfDay() {
   const todayOrders = state.orders.filter(o => o.date === today);
   state.orders = state.orders.filter(o => o.date !== today);
   state.nextOrderId = state.orders.length ? Math.max(...state.orders.map(x=>x.id)) + 1 : 1;
-  state.activityLog = [];
   state.currentOrder = [];
   state.selectedTable = null;
+  state.activityLog = state.activityLog.filter(l => l.log_date !== today);
   state.nextTableId = state.tables.length ? Math.max(...state.tables.map(x=>x.id)) + 1 : 1;
-  state.menu = DEFAULT_MENU.map(d => ({ ...d }));
   kitchenInvCategorySelected = '__categories__';
   adminInvCategorySelected = '__categories__';
   if (supabaseClient) {
     supabaseClient.from('orders').delete().eq('date', today)
       .then(({ error }) => { if (error) console.error('Error borrando pedidos de hoy:', error); });
+    supabaseClient.from('activity_log').delete().eq('log_date', today)
+      .then(({ error }) => { if (error) console.error('Error borrando actividad de hoy:', error); });
   }
   renderAdminVentas();
   renderHistorial();
@@ -1135,7 +1136,7 @@ function deleteTable(id) {
 //  ADMIN – PERSONAL
 // ═══════════════════════════════════════════
 async function logActivity(person, role, action, color) {
-  const item = { person, role, action, color, time: new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) };
+  const item = { person, role, action, color, time: new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}), log_date: new Date().toLocaleDateString('es-CO') };
   state.activityLog.unshift(item);
   if (state.activityLog.length > 100) state.activityLog.pop();
   if (supabaseClient) {

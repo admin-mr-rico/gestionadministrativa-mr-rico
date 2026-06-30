@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS orders (
   total numeric DEFAULT 0,
   status text,
   payment text,
+  payment_method text,
   delivered boolean DEFAULT false,
   time text,
   date text,
@@ -70,65 +71,56 @@ CREATE TABLE IF NOT EXISTS activity_log (
   role text,
   action text,
   color text,
-  time text
+  time text,
+  log_date text
 );
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_orders_date ON orders(date);
 CREATE INDEX IF NOT EXISTS idx_menu_cat ON menu(cat);
+CREATE INDEX IF NOT EXISTS idx_activity_log_date ON activity_log(log_date);
+
+-- ══════════════════════════════════════════════════════════
+-- MIGRACIONES INCREMENTALES (por si la tabla ya existía sin estas columnas)
+-- Seguras de ejecutar aunque ya existan: no harán nada si la columna ya está.
+-- ══════════════════════════════════════════════════════════
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method text;
+ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS log_date text;
 
 -- ══════════════════════════════════════════════════════════
 -- CONFIGURACIÓN DE TIEMPO REAL (REALTIME) Y SEGURIDAD (RLS)
 -- ══════════════════════════════════════════════════════════
 
--- 1. Habilitar la réplica en tiempo real para todas las tablas clave
--- Si la publicación 'supabase_realtime' ya existe, añadimos las tablas de forma segura
-DO $$
-BEGIN
-  ALTER PUBLICATION supabase_realtime ADD TABLE orders;
-  ALTER PUBLICATION supabase_realtime ADD TABLE menu;
-  ALTER PUBLICATION supabase_realtime ADD TABLE inventory;
-  ALTER PUBLICATION supabase_realtime ADD TABLE tables;
-  ALTER PUBLICATION supabase_realtime ADD TABLE users;
-  ALTER PUBLICATION supabase_realtime ADD TABLE activity_log;
-  ALTER PUBLICATION supabase_realtime ADD TABLE categories;
-EXCEPTION WHEN OTHERS THEN
-  -- Puede fallar si ya están agregadas o la publicación no existe en este entorno todavía.
-  -- Si no existe, puedes crearla ejecutando: CREATE PUBLICATION supabase_realtime;
-END $$;
+-- 1. Habilitar la réplica en tiempo real para todas las tablas clave.
+-- Cada ALTER va en su propio bloque DO/EXCEPTION para que si una tabla
+-- ya estaba agregada (y por tanto falla), NO bloquee el registro de las demás.
+-- (Si la publicación 'supabase_realtime' no existe, créala primero con:
+--  CREATE PUBLICATION supabase_realtime;)
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE orders; EXCEPTION WHEN OTHERS THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE menu; EXCEPTION WHEN OTHERS THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE inventory; EXCEPTION WHEN OTHERS THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE tables; EXCEPTION WHEN OTHERS THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE users; EXCEPTION WHEN OTHERS THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE activity_log; EXCEPTION WHEN OTHERS THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE categories; EXCEPTION WHEN OTHERS THEN NULL; END $$;
 
 -- 2. Configuración de RLS (Seguridad a Nivel de Fila)
 -- Para garantizar que el cliente anónimo (anon_key) pueda leer y escribir datos sin autenticación OAuth compleja:
 
 -- Opción A: Desactivar RLS por completo (Recomendado para entornos locales/desarrollo interno rápido)
---ALTER TABLE users DISABLE ROW LEVEL SECURITY;
---ALTER TABLE menu DISABLE ROW LEVEL SECURITY;
---ALTER TABLE inventory DISABLE ROW LEVEL SECURITY;
---ALTER TABLE tables DISABLE ROW LEVEL SECURITY;
---ALTER TABLE orders DISABLE ROW LEVEL SECURITY;
---ALTER TABLE activity_log DISABLE ROW LEVEL SECURITY;
---ALTER TABLE categories DISABLE ROW LEVEL SECURITY;
+ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE menu DISABLE ROW LEVEL SECURITY;
+ALTER TABLE inventory DISABLE ROW LEVEL SECURITY;
+ALTER TABLE tables DISABLE ROW LEVEL SECURITY;
+ALTER TABLE orders DISABLE ROW LEVEL SECURITY;
+ALTER TABLE activity_log DISABLE ROW LEVEL SECURITY;
+ALTER TABLE categories DISABLE ROW LEVEL SECURITY;
 
 -- Opción B: Si prefieres mantener RLS activo, ejecuta estas políticas abiertas en la consola SQL de Supabase:
-CREATE POLICY "Permitir todo a anon" ON users FOR ALL TO public USING (true) WITH CHECK (true);
-CREATE POLICY "Permitir todo a anon" ON menu FOR ALL TO public USING (true) WITH CHECK (true);
-CREATE POLICY "Permitir todo a anon" ON inventory FOR ALL TO public USING (true) WITH CHECK (true);
-CREATE POLICY "Permitir todo a anon" ON tables FOR ALL TO public USING (true) WITH CHECK (true);
-CREATE POLICY "Permitir todo a anon" ON orders FOR ALL TO public USING (true) WITH CHECK (true);
-CREATE POLICY "Permitir todo a anon" ON activity_log FOR ALL TO public USING (true) WITH CHECK (true);
-CREATE POLICY "Permitir todo a anon" ON categories FOR ALL TO public USING (true) WITH CHECK (true);
-
--- -----------------------------------------------------------------
--- Compatibilidad: asegurar que la columna `inventoryUpdated`
--- exista en la tabla `orders` (evita errores 400 al insertar pedidos)
--- -----------------------------------------------------------------
-ALTER TABLE public.orders
-  ADD COLUMN IF NOT EXISTS "inventoryUpdated" boolean DEFAULT false;
-
--- Añadimos también una variante con snake_case por compatibilidad
-ALTER TABLE public.orders
- ADD COLUMN IF NOT EXISTS inventory_updated boolean DEFAULT false;
-
--- Nota: ejecuta este archivo desde la consola SQL de Supabase
--- o aplica estas sentencias manualmente si ya tienes un proceso de migraciones.
-
+-- CREATE POLICY "Permitir todo a anon" ON users FOR ALL TO public USING (true) WITH CHECK (true);
+-- CREATE POLICY "Permitir todo a anon" ON menu FOR ALL TO public USING (true) WITH CHECK (true);
+-- CREATE POLICY "Permitir todo a anon" ON inventory FOR ALL TO public USING (true) WITH CHECK (true);
+-- CREATE POLICY "Permitir todo a anon" ON tables FOR ALL TO public USING (true) WITH CHECK (true);
+-- CREATE POLICY "Permitir todo a anon" ON orders FOR ALL TO public USING (true) WITH CHECK (true);
+-- CREATE POLICY "Permitir todo a anon" ON activity_log FOR ALL TO public USING (true) WITH CHECK (true);
+-- CREATE POLICY "Permitir todo a anon" ON categories FOR ALL TO public USING (true) WITH CHECK (true);
