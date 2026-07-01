@@ -47,6 +47,9 @@ const state = {
 };
 let adminInvCategorySelected = '__categories__';
 let kitchenInvCategorySelected = '__categories__';
+let adminInvSubcatSelected = '__subcats__';
+let kitchenInvSubcatSelected = '__subcats__';
+let meseroCategorySelected = '__categories__';
 
 // Guardamos una copia de los usuarios y del menú por defecto para fallback local
 const DEFAULT_USERS = state.users.map(u => ({ ...u }));
@@ -392,22 +395,56 @@ function selectTable(id, name) {
 //  MESERO – MENU
 // ═══════════════════════════════════════════
 function populateMeseroCat() {
-  const cats = ['', ...state.categories];
-  const sel = document.getElementById('mesero-cat');
-  sel.innerHTML = `<option value="">Todas las categorías</option>` + state.categories.map(c=>`<option>${c}</option>`).join('');
+  const nav = document.getElementById('mesero-cat-nav');
+  if (!nav) return;
+  nav.innerHTML = `<button class="btn-sm ${meseroCategorySelected==='__categories__' ? 'btn-primary' : ''}" onclick="selectMeseroCategory('__categories__')">📁 Categorías</button>` +
+    `<button class="btn-sm ${meseroCategorySelected==='all' ? 'btn-primary' : ''}" onclick="selectMeseroCategory('all')">Ver todo</button>` +
+    state.categories.map(c=>`<button class="btn-sm ${meseroCategorySelected===c ? 'btn-primary' : ''}" onclick="selectMeseroCategory('${c}')">${c}</button>`).join('');
+}
+
+function selectMeseroCategory(cat) {
+  meseroCategorySelected = cat;
+  populateMeseroCat();
+  renderMenuCards();
 }
 
 function renderMenuCards() {
-  const search = (document.getElementById('mesero-search')?.value||'').toLowerCase();
-  const cat    = document.getElementById('mesero-cat')?.value||'';
-  let filtered = state.menu.filter(d => {
-    const ms = !search || d.name.toLowerCase().includes(search) || d.desc.toLowerCase().includes(search);
-    const mc = !cat || d.cat===cat;
-    return ms && mc;
-  });
+  const search = (document.getElementById('mesero-search')?.value||'').toLowerCase().trim();
   const grid = document.getElementById('menu-cards-grid');
+
+  // Si hay una búsqueda activa, buscamos en todo el menú sin importar la carpeta actual
+  if (search) {
+    const filtered = state.menu.filter(d => d.name.toLowerCase().includes(search) || (d.desc||'').toLowerCase().includes(search));
+    if (!filtered.length) {
+      grid.innerHTML=`<div class="empty-state" style="grid-column:1/-1;"><div class="icon">🔍</div><p>Sin resultados</p></div>`;
+      return;
+    }
+    grid.innerHTML = filtered.map(d => menuCardHTML(d, true)).join('');
+    return;
+  }
+
+  // Vista de carpetas por categoría (por defecto), para no tener que hacer scroll entre todos los platos
+  if (meseroCategorySelected === '__categories__') {
+    if (!state.categories.length) {
+      grid.innerHTML=`<div class="empty-state" style="grid-column:1/-1;"><div class="icon">📁</div><p>No hay categorías</p></div>`;
+      return;
+    }
+    grid.innerHTML = state.categories.map(c => {
+      const count = state.menu.filter(d=>d.cat===c).length;
+      return `<div class="menu-card" style="cursor:pointer;" onclick="selectMeseroCategory('${c}')">
+        <div class="menu-card-img" style="font-size:40px;">📁</div>
+        <div class="menu-card-body" style="text-align:center;">
+          <div class="menu-card-name">${c}</div>
+          <div class="menu-card-desc">${count} plato${count===1?'':'s'}</div>
+        </div>
+      </div>`;
+    }).join('');
+    return;
+  }
+
+  const filtered = meseroCategorySelected === 'all' ? state.menu : state.menu.filter(d => d.cat === meseroCategorySelected);
   if (!filtered.length) {
-    grid.innerHTML=`<div class="empty-state" style="grid-column:1/-1;"><div class="icon">🔍</div><p>Sin resultados</p></div>`;
+    grid.innerHTML=`<div class="empty-state" style="grid-column:1/-1;"><div class="icon">🍽️</div><p>Sin platos en esta categoría</p></div>`;
     return;
   }
   grid.innerHTML = filtered.map(d => menuCardHTML(d, true)).join('');
@@ -676,6 +713,8 @@ function renderKitchenInventory() {
   }
 
   if (kitchenInvCategorySelected === '__categories__') {
+    const subcatNav = document.getElementById('kitchen-inv-subcat-nav');
+    if (subcatNav) subcatNav.innerHTML = '';
     if (!categories.length) {
       el.innerHTML = `<div class="empty-state"><div class="icon">📦</div><p>No hay categorías de inventario</p></div>`;
       return;
@@ -689,9 +728,46 @@ function renderKitchenInventory() {
     return;
   }
 
-  const items = kitchenInvCategorySelected === 'all'
+  let items = kitchenInvCategorySelected === 'all'
     ? state.inventory
     : state.inventory.filter(i => i.cat === kitchenInvCategorySelected);
+
+  const subcatNav = document.getElementById('kitchen-inv-subcat-nav');
+  if (kitchenInvCategorySelected !== 'all') {
+    const subcats = [...new Set(items.map(i=>i.subcat).filter(Boolean))].sort();
+    if (subcats.length) {
+      if (subcatNav) {
+        subcatNav.innerHTML = `<button class="btn-sm ${kitchenInvSubcatSelected==='__subcats__' ? 'btn-primary' : ''}" onclick="selectKitchenInvSubcat('__subcats__')">📁 Subcategorías</button>` +
+          `<button class="btn-sm ${kitchenInvSubcatSelected==='all' ? 'btn-primary' : ''}" onclick="selectKitchenInvSubcat('all')">Ver todo</button>` +
+          subcats.map(s=>`<button class="btn-sm ${kitchenInvSubcatSelected===s ? 'btn-primary' : ''}" onclick="selectKitchenInvSubcat('${s}')">${s}</button>`).join('');
+      }
+      if (kitchenInvSubcatSelected === '__subcats__') {
+        el.innerHTML = subcats.map(s => {
+          const count = items.filter(i=>i.subcat===s).length;
+          return `<div class="inv-card" style="cursor:pointer;" onclick="selectKitchenInvSubcat('${s}')">
+            <div style="font-size:22px;">📂</div>
+            <div style="font-weight:700;margin-top:10px;">${s}</div>
+            <div style="font-size:12px;color:var(--gray-500);margin-top:4px;">${count} insumo${count===1?'':'s'}</div>
+          </div>`;
+        }).join('');
+        const noSubcatCount = items.filter(i=>!i.subcat).length;
+        if (noSubcatCount) {
+          el.innerHTML += `<div class="inv-card" style="cursor:pointer;" onclick="selectKitchenInvSubcat('__none__')">
+            <div style="font-size:22px;">📄</div>
+            <div style="font-weight:700;margin-top:10px;">Sin subcategoría</div>
+            <div style="font-size:12px;color:var(--gray-500);margin-top:4px;">${noSubcatCount} insumo${noSubcatCount===1?'':'s'}</div>
+          </div>`;
+        }
+        return;
+      }
+      if (kitchenInvSubcatSelected === '__none__') items = items.filter(i=>!i.subcat);
+      else if (kitchenInvSubcatSelected !== 'all') items = items.filter(i=>i.subcat===kitchenInvSubcatSelected);
+    } else if (subcatNav) {
+      subcatNav.innerHTML = '';
+    }
+  } else if (subcatNav) {
+    subcatNav.innerHTML = '';
+  }
 
   if (!items.length) {
     el.innerHTML = `<div class="empty-state"><div class="icon">📦</div><p>No hay insumos${kitchenInvCategorySelected==='all' ? '' : ' en esta categoría'}</p></div>`;
@@ -704,7 +780,7 @@ function renderKitchenInventory() {
     const label = inv.qty>inv.min ? 'OK' : inv.qty>0 ? 'Bajo' : 'Agotado';
     return `<div style="background:var(--gray-50);border-radius:10px;padding:12px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-        <div><strong>${inv.emoji} ${inv.name}</strong><div style="font-size:12px;color:var(--gray-500);">${inv.cat}</div></div>
+        <div><strong>${inv.emoji} ${inv.name}</strong><div style="font-size:12px;color:var(--gray-500);">${inv.cat}${inv.subcat?' · '+inv.subcat:''}</div></div>
         <div style="text-align:right;color:${color};font-weight:800;">${inv.qty} ${inv.unit}</div>
       </div>
       <div class="inv-bar"><div class="inv-bar-fill" style="width:${pct}%;background:${color};"></div></div>
@@ -775,7 +851,7 @@ function renderAdminVentas() {
   }
 
   const tbody = document.getElementById('sales-tbody');
-  if (!tod.length) { tbody.innerHTML=`<tr><td colspan="9" style="text-align:center;color:var(--gray-400);padding:32px;">Sin pedidos hoy</td></tr>`; return; }
+  if (!tod.length) { tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;color:var(--gray-400);padding:32px;">Sin pedidos hoy</td></tr>`; return; }
   const sColor={pending:'#FFF8E1',preparing:'#FFF0E8',done:'#E8F5E9'};
   const sText={pending:'⏳ Pendiente',preparing:'🔥 Preparando',done:'✅ Listo'};
 
@@ -785,6 +861,12 @@ function renderAdminVentas() {
       const subtotal = unitPrice * i.qty;
       return `<li style="padding:4px 0;">${i.qty}× ${i.name} — <small style="color:var(--gray-400);">$${unitPrice.toLocaleString()} c/u</small> <strong style="margin-left:8px;">$${subtotal.toLocaleString()}</strong></li>`;
     }).join('')}</ul>`;
+
+    const deliveryHtml = o.status !== 'done'
+      ? `<span class="badge" style="background:var(--gray-100);color:var(--gray-500);">–</span>`
+      : o.delivered
+        ? `<span class="badge" style="background:#E8F5E9;color:var(--green);">✅ Entregado</span>`
+        : `<span class="badge" style="background:#FFF8E1;color:var(--yellow);">⏳ Sin entregar</span>`;
 
     return `
     <tr>
@@ -797,6 +879,7 @@ function renderAdminVentas() {
       <td>
         <span class="badge ${o.payment==='paid'?'pay-paid':'pay-pending'}">${o.payment==='paid'?'✅ Pagado':'⏳ Pendiente'}</span>
       </td>
+      <td>${deliveryHtml}</td>
       <td style="color:var(--gray-400);font-size:12px;">${o.time}</td>
       <td>
         ${o.payment!=='paid'?`<button class="btn-sm btn-green" onclick="openPaymentModal(${o.id})">Cobrar</button>`:''}
@@ -905,6 +988,8 @@ function renderInvGrid() {
   if (!state.inventory.length) { grid.innerHTML=`<div class="empty-state"><div class="icon">📦</div><p>Sin insumos</p></div>`; return; }
 
   if (adminInvCategorySelected === '__categories__') {
+    const subcatNav = document.getElementById('inv-subcat-nav');
+    if (subcatNav) subcatNav.innerHTML = '';
     if (!categories.length) { grid.innerHTML=`<div class="empty-state"><div class="icon">📦</div><p>No hay categorías</p></div>`; return; }
     grid.innerHTML = categories.map(c => {
       return `<div class="inv-card" style="cursor:pointer;flex-direction:column;align-items:stretch;gap:12px;" onclick="selectInvCategory('${c}')">
@@ -917,6 +1002,45 @@ function renderInvGrid() {
 
   let items = state.inventory;
   if (adminInvCategorySelected !== 'all') items = state.inventory.filter(i=>i.cat===adminInvCategorySelected);
+
+  // Nivel de subcategorías: solo aparece dentro de una categoría específica (no en "Ver todo")
+  const subcatNav = document.getElementById('inv-subcat-nav');
+  if (adminInvCategorySelected !== 'all') {
+    const subcats = [...new Set(items.map(i=>i.subcat).filter(Boolean))].sort();
+    if (subcats.length) {
+      if (subcatNav) {
+        subcatNav.innerHTML = `<button class="btn-sm ${adminInvSubcatSelected==='__subcats__' ? 'btn-primary' : ''}" onclick="selectInvSubcat('__subcats__')">📁 Subcategorías</button>` +
+          `<button class="btn-sm ${adminInvSubcatSelected==='all' ? 'btn-primary' : ''}" onclick="selectInvSubcat('all')">Ver todo</button>` +
+          subcats.map(s=>`<button class="btn-sm ${adminInvSubcatSelected===s ? 'btn-primary' : ''}" onclick="selectInvSubcat('${s}')">${s}</button>`).join('');
+      }
+      if (adminInvSubcatSelected === '__subcats__') {
+        grid.innerHTML = subcats.map(s => {
+          const count = items.filter(i=>i.subcat===s).length;
+          return `<div class="inv-card" style="cursor:pointer;flex-direction:column;align-items:stretch;gap:12px;" onclick="selectInvSubcat('${s}')">
+            <div style="font-size:26px;">📂</div>
+            <div style="font-size:16px;font-weight:700;">${s}</div>
+            <div style="color:var(--gray-500);font-size:12px;">${count} insumo${count===1?'':'s'}</div>
+          </div>`;
+        }).join('');
+        const noSubcatCount = items.filter(i=>!i.subcat).length;
+        if (noSubcatCount) {
+          grid.innerHTML += `<div class="inv-card" style="cursor:pointer;flex-direction:column;align-items:stretch;gap:12px;" onclick="selectInvSubcat('__none__')">
+            <div style="font-size:26px;">📄</div>
+            <div style="font-size:16px;font-weight:700;">Sin subcategoría</div>
+            <div style="color:var(--gray-500);font-size:12px;">${noSubcatCount} insumo${noSubcatCount===1?'':'s'}</div>
+          </div>`;
+        }
+        return;
+      }
+      if (adminInvSubcatSelected === '__none__') items = items.filter(i=>!i.subcat);
+      else if (adminInvSubcatSelected !== 'all') items = items.filter(i=>i.subcat===adminInvSubcatSelected);
+    } else {
+      if (subcatNav) subcatNav.innerHTML = '';
+    }
+  } else if (subcatNav) {
+    subcatNav.innerHTML = '';
+  }
+
   if (!items.length) { grid.innerHTML=`<div class="empty-state"><div class="icon">📦</div><p>No hay insumos${adminInvCategorySelected==='all' ? '' : ' en esta categoría'}</p></div>`; return; }
   grid.innerHTML = items.map(inv=>{
     const pct = Math.min(100, Math.round((inv.qty/Math.max(inv.qty,inv.min*2))*100));
@@ -927,7 +1051,7 @@ function renderInvGrid() {
         <span style="font-size:32px;">${inv.emoji}</span>
         <div style="flex:1;">
           <div class="inv-name">${inv.name}</div>
-          <div class="inv-cat">${inv.cat}</div>
+          <div class="inv-cat">${inv.cat}${inv.subcat?' · '+inv.subcat:''}</div>
         </div>
         <div style="text-align:right;">
           <div style="font-size:20px;font-weight:800;color:${color};">${inv.qty}</div>
@@ -960,11 +1084,12 @@ function openInvModal(id) {
     document.getElementById('inv-unit').value=inv.unit;
     document.getElementById('inv-min').value=inv.min;
     document.getElementById('inv-cat').value=inv.cat;
+    document.getElementById('inv-subcat').value=inv.subcat||'';
     document.getElementById('inv-emoji').value=inv.emoji||'';
   } else {
     document.getElementById('inv-modal-title').textContent='Agregar Insumo';
     document.getElementById('edit-inv-id').value='';
-    ['inv-name','inv-qty','inv-unit','inv-min','inv-cat','inv-emoji'].forEach(i=>document.getElementById(i).value='');
+    ['inv-name','inv-qty','inv-unit','inv-min','inv-cat','inv-subcat','inv-emoji'].forEach(i=>document.getElementById(i).value='');
   }
   m.classList.add('open');
 }
@@ -975,13 +1100,14 @@ function saveInv() {
   const unit = document.getElementById('inv-unit').value.trim()||'unidades';
   const min  = parseInt(document.getElementById('inv-min').value)||0;
   const cat  = document.getElementById('inv-cat').value.trim()||'General';
+  const subcat = document.getElementById('inv-subcat').value.trim()||null;
   const emoji= document.getElementById('inv-emoji').value.trim()||'📦';
   const editId=parseInt(document.getElementById('edit-inv-id').value);
   if (!name) { showToast('⚠️ El nombre es obligatorio', 'error'); return; }
   if (editId) {
     const inv=state.inventory.find(x=>x.id===editId);
     if (inv) {
-      Object.assign(inv,{name,qty,unit,min,cat,emoji});
+      Object.assign(inv,{name,qty,unit,min,cat,subcat,emoji});
       if (supabaseClient) {
         supabaseClient.from('inventory').upsert([inv])
           .then(({ error }) => { if (error) console.error(error); });
@@ -989,7 +1115,7 @@ function saveInv() {
     }
     showToast('✅ Insumo actualizado','success');
   } else {
-    const newInv = {id:state.nextInvId++,name,qty,unit,min,cat,emoji};
+    const newInv = {id:state.nextInvId++,name,qty,unit,min,cat,subcat,emoji};
     state.inventory.push(newInv);
     if (supabaseClient) {
       supabaseClient.from('inventory').insert([newInv])
@@ -1003,11 +1129,23 @@ function saveInv() {
 
 function selectInvCategory(cat) {
   adminInvCategorySelected = cat;
+  adminInvSubcatSelected = '__subcats__';
+  renderInvGrid();
+}
+
+function selectInvSubcat(subcat) {
+  adminInvSubcatSelected = subcat;
   renderInvGrid();
 }
 
 function selectKitchenInvCategory(cat) {
   kitchenInvCategorySelected = cat;
+  kitchenInvSubcatSelected = '__subcats__';
+  renderKitchenInventory();
+}
+
+function selectKitchenInvSubcat(subcat) {
+  kitchenInvSubcatSelected = subcat;
   renderKitchenInventory();
 }
 
@@ -1023,6 +1161,9 @@ function resetEndOfDay() {
   state.nextTableId = state.tables.length ? Math.max(...state.tables.map(x=>x.id)) + 1 : 1;
   kitchenInvCategorySelected = '__categories__';
   adminInvCategorySelected = '__categories__';
+  kitchenInvSubcatSelected = '__subcats__';
+  adminInvSubcatSelected = '__subcats__';
+  meseroCategorySelected = '__categories__';
   if (supabaseClient) {
     supabaseClient.from('orders').delete().eq('date', today)
       .then(({ error }) => { if (error) console.error('Error borrando pedidos de hoy:', error); });
@@ -1296,15 +1437,68 @@ function renderCatList() {
         <button class="btn-sm btn-secondary" onclick="cancelCategoryEdit()">Cancelar</button>
       </div>`;
     }
+    const dishesOpen = state.managingCategoryDishesIndex === i;
+    const dishesPanel = dishesOpen ? `
+      <div style="padding:10px 0 14px;border-bottom:1px solid var(--gray-100);">
+        <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;">Marca los platos que pertenecen a "${c}":</div>
+        <div style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;">
+          ${state.menu.length ? state.menu.map(d => `
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+              <input type="checkbox" class="cat-dish-check" data-dish-id="${d.id}" ${d.cat===c?'checked':''}>
+              <span>${d.emoji||'🍽️'} ${d.name}</span>
+              <span style="color:var(--gray-400);font-size:11px;">${d.cat && d.cat!==c ? '(actualmente en '+d.cat+')' : ''}</span>
+            </label>
+          `).join('') : '<div style="color:var(--gray-400);font-size:13px;">No hay platos creados aún</div>'}
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button class="btn-sm btn-primary" onclick="saveCategoryDishes(${i})">Guardar platos</button>
+          <button class="btn-sm btn-secondary" onclick="toggleCategoryDishes(${i})">Cerrar</button>
+        </div>
+      </div>` : '';
     return `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--gray-100);">
-      <span style="font-size:14px;font-weight:600;">🏷️ ${c}</span>
-      <div style="display:flex;gap:6px;">
-        <button class="btn-sm btn-edit" onclick="startEditCategory(${i})">✏️ Editar</button>
-        <button class="btn-sm btn-delete" onclick="deleteCategory(${i})">Eliminar</button>
+    <div style="padding:10px 0;border-bottom:1px solid var(--gray-100);">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:14px;font-weight:600;">🏷️ ${c}</span>
+        <div style="display:flex;gap:6px;">
+          <button class="btn-sm btn-blue" onclick="toggleCategoryDishes(${i})">🍽️ ${dishesOpen?'Ocultar platos':'Platos'}</button>
+          <button class="btn-sm btn-edit" onclick="startEditCategory(${i})">✏️ Editar</button>
+          <button class="btn-sm btn-delete" onclick="deleteCategory(${i})">Eliminar</button>
+        </div>
       </div>
+      ${dishesPanel}
     </div>`;
   }).join('');
+}
+
+function toggleCategoryDishes(i) {
+  state.managingCategoryDishesIndex = state.managingCategoryDishesIndex === i ? null : i;
+  renderCatList();
+}
+
+function saveCategoryDishes(i) {
+  const catName = state.categories[i];
+  const checks = document.querySelectorAll('#cat-list .cat-dish-check');
+  const checkedIds = new Set([...checks].filter(c=>c.checked).map(c=>parseInt(c.dataset.dishId)));
+  let changed = 0;
+  state.menu.forEach(d => {
+    const shouldBeInCat = checkedIds.has(d.id);
+    const isInCat = d.cat === catName;
+    if (shouldBeInCat && !isInCat) {
+      d.cat = catName;
+      changed++;
+      if (supabaseClient) supabaseClient.from('menu').update({ cat: catName }).eq('id', d.id).then(({error})=>{ if(error) console.error(error); });
+    } else if (!shouldBeInCat && isInCat) {
+      d.cat = '';
+      changed++;
+      if (supabaseClient) supabaseClient.from('menu').update({ cat: '' }).eq('id', d.id).then(({error})=>{ if(error) console.error(error); });
+    }
+  });
+  state.managingCategoryDishesIndex = null;
+  renderCatList();
+  renderAdminMenu();
+  populateMeseroCat();
+  renderMenuCards();
+  showToast(changed ? `✅ ${changed} plato(s) actualizados` : 'Sin cambios', 'success');
 }
 
 function startEditCategory(i) {
@@ -1324,14 +1518,19 @@ function saveCategoryEdit(i) {
   const oldVal = state.categories[i];
   state.categories[i] = val;
   state.editingCategoryIndex = null;
+  // Los platos que pertenecían a la categoría vieja pasan a usar el nuevo nombre
+  state.menu.forEach(d => { if (d.cat === oldVal) d.cat = val; });
   renderCatList();
   populateMeseroCat();
   renderDishCatSelect();
   renderAdminMenu();
+  renderMenuCards();
   showToast('✅ Categoría actualizada','success');
 
   if (supabaseClient) {
     supabaseClient.from('categories').update({ name: val }).eq('name', oldVal)
+      .then(({ error }) => { if (error) console.error(error); });
+    supabaseClient.from('menu').update({ cat: val }).eq('cat', oldVal)
       .then(({ error }) => { if (error) console.error(error); });
   }
 }
@@ -1422,7 +1621,7 @@ function renderCajaVentas() {
   document.getElementById('c-pending-payments').textContent = pendingPayments;
   document.getElementById('c-top-dish').textContent = top ? top[0] : '–';
   const tbody=document.getElementById('caja-sales-tbody');
-  if (!tod.length) { tbody.innerHTML=`<tr><td colspan="9" style="text-align:center;color:var(--gray-400);padding:32px;">Sin pedidos hoy</td></tr>`; return; }
+  if (!tod.length) { tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;color:var(--gray-400);padding:32px;">Sin pedidos hoy</td></tr>`; return; }
   const sColor={pending:'#FFF8E1',preparing:'#FFF0E8',done:'#E8F5E9'};
   const sText={pending:'⏳ Pendiente',preparing:'🔥 Preparando',done:'✅ Listo'};
   tbody.innerHTML=[...tod].reverse().map(o=>{
@@ -1431,6 +1630,11 @@ function renderCajaVentas() {
       const subtotal = unitPrice * i.qty;
       return `<li style="padding:4px 0;">${i.qty}× ${i.name} — <small style="color:var(--gray-400);">$${unitPrice.toLocaleString()} c/u</small> <strong style="margin-left:8px;">$${subtotal.toLocaleString()}</strong></li>`;
     }).join('')}</ul>`;
+    const deliveryHtml = o.status !== 'done'
+      ? `<span class="badge" style="background:var(--gray-100);color:var(--gray-500);">–</span>`
+      : o.delivered
+        ? `<span class="badge" style="background:#E8F5E9;color:var(--green);">✅ Entregado</span>`
+        : `<span class="badge" style="background:#FFF8E1;color:var(--yellow);">⏳ Sin entregar</span>`;
     return `
     <tr>
       <td><strong>#${o.id}</strong></td>
@@ -1440,6 +1644,7 @@ function renderCajaVentas() {
       <td><strong style="color:var(--orange);">$${o.total.toLocaleString()}</strong></td>
       <td><span class="badge" style="background:${sColor[o.status]};color:var(--gray-800);">${sText[o.status]}</span></td>
       <td><span class="badge ${o.payment==='paid'?'pay-paid':'pay-pending'}">${o.payment==='paid'?'✅ '+(o.payment_method==='transferencia'?'Transferencia':'Efectivo'):'⏳ Pendiente'}</span></td>
+      <td>${deliveryHtml}</td>
       <td style="color:var(--gray-400);font-size:12px;">${o.time}</td>
       <td>${o.payment!=='paid'?`<button class="btn-sm btn-green" onclick="openPaymentModal(${o.id})">Cobrar</button>`:''}</td>
     </tr>`;

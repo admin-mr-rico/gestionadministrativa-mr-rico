@@ -65,9 +65,10 @@
           <div class="inline-flex">
             <div class="search-bar" style="min-width:200px;"><input type="text" placeholder="Buscar plato..."
                 id="mesero-search" oninput="renderMenuCards()"></div>
-            <select class="form-control" id="mesero-cat" onchange="renderMenuCards()" style="width:150px;"></select>
           </div>
         </div>
+
+        <div id="mesero-cat-nav" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;"></div>
 
         <div class="grid-2" style="align-items:start;">
           <div id="menu-cards-grid" class="menu-grid"></div>
@@ -147,6 +148,7 @@
           <div class="card-title">📦 Inventario disponible</div>
           <div class="card-sub">Insumos visibles para cocina</div>
           <div id="kitchen-inv-category-nav" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>
+          <div id="kitchen-inv-subcat-nav" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;"></div>
           <div id="kitchen-inventory"
             style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;"></div>
         </div>
@@ -241,6 +243,7 @@
                     <th>Total</th>
                     <th>Estado</th>
                     <th>Pago</th>
+                    <th>Entrega</th>
                     <th>Hora</th>
                     <th>Acciones</th>
                   </tr>
@@ -272,7 +275,8 @@
             <button class="btn-primary" style="width:auto;padding:10px 20px;" onclick="openInvModal()">+ Agregar
               Insumo</button>
           </div>
-          <div id="inv-category-nav" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;"></div>
+          <div id="inv-category-nav" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>
+          <div id="inv-subcat-nav" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;"></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;" id="inv-grid">
           </div>
         </div>
@@ -394,6 +398,7 @@
                     <th>Total</th>
                     <th>Estado</th>
                     <th>Pago</th>
+                    <th>Entrega</th>
                     <th>Hora</th>
                     <th>Acciones</th>
                   </tr>
@@ -497,6 +502,8 @@
         <div class="form-group"><label>CATEGORÍA</label><input class="form-control" id="inv-cat"
             placeholder="Bebidas, Carnes..."></div>
       </div>
+      <div class="form-group"><label>SUBCATEGORÍA (opcional)</label><input class="form-control" id="inv-subcat"
+          placeholder="Ej: Gaseosas, Jugos..."></div>
       <div class="form-group"><label>EMOJI</label><input class="form-control" id="inv-emoji" placeholder="🥤"
           maxlength="4"></div>
       <div style="display:flex;gap:10px;margin-top:6px;">
