@@ -461,7 +461,8 @@
         <div class="form-group"><label>CANTIDAD EN STOCK *</label><input class="form-control" id="dish-qty"
             type="number" placeholder="0" min="0"></div>
       </div>
-      <div class="form-group"><label>CATEGORÍA</label><select class="form-control" id="dish-cat"></select></div>
+      <div class="form-group"><label>CATEGORÍA</label><select class="form-control" id="dish-cat" onchange="renderDishSubcatSelect()"></select></div>
+      <div class="form-group"><label>SUBCATEGORÍA (opcional)</label><select class="form-control" id="dish-subcat"></select></div>
       <div class="form-group"><label>DESCRIPCIÓN</label><textarea class="form-control" id="dish-desc"
           placeholder="Ingredientes, preparación..."></textarea></div>
       <div class="form-group"><label>EMOJI</label><input class="form-control" id="dish-emoji" placeholder="🍲"
@@ -570,16 +571,19 @@
 
   <!-- ══ MODAL CATEGORÍAS ══ -->
   <div class="modal-overlay" id="cat-modal">
-    <div class="modal">
+    <div class="modal" style="max-width:600px;">
       <div class="modal-header">
-        <div class="modal-title">Gestionar Categorías</div><button class="btn-close"
+        <div class="modal-title">Gestionar Categorías del Menú</div><button class="btn-close"
           onclick="closeModal('cat-modal')">✕</button>
       </div>
-      <div class="form-row" style="margin-bottom:14px;">
-        <input class="form-control" id="new-cat-input" placeholder="Nueva categoría...">
-        <button class="btn-primary" onclick="addCategory()">Agregar</button>
+      <div style="margin-bottom:16px;">
+        <div style="font-size:13px;color:var(--gray-500);margin-bottom:8px;">📁 Crear carpeta</div>
+        <div class="form-row" style="margin-bottom:14px;">
+          <input class="form-control" id="new-cat-input" placeholder="Nombre de categoría principal (ej: Comidas Rápidas)">
+          <button class="btn-primary" onclick="addCategory()">Agregar</button>
+        </div>
       </div>
-      <div id="cat-list"></div>
+      <div id="cat-list" style="max-height:400px;overflow-y:auto;"></div>
     </div>
   </div>
 

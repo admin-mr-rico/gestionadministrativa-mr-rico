@@ -43,6 +43,7 @@ const state = {
   nextOrderId: 1,
   currentOrder: [],
   selectedTable: null,
+  menuCategories: [],
   activityLog: []
 };
 let adminInvCategorySelected = '__categories__';
@@ -50,6 +51,8 @@ let kitchenInvCategorySelected = '__categories__';
 let adminInvSubcatSelected = '__subcats__';
 let kitchenInvSubcatSelected = '__subcats__';
 let meseroCategorySelected = '__categories__';
+let adminMenuCategorySelected = '__categories__';
+let adminMenuSubcatSelected = '__subcats__';
 
 // Guardamos una copia de los usuarios y del menú por defecto para fallback local
 const DEFAULT_USERS = state.users.map(u => ({ ...u }));
@@ -94,7 +97,8 @@ async function loadInitialState() {
       loadTables(),
       loadOrders(),
       loadActivityLog(),
-      loadCategories()
+      loadCategories(),
+      loadMenuCategories()
     ]);
 
     // Hacemos sembrado inicial (seed) sólo de lo que falte en Supabase
@@ -175,6 +179,15 @@ async function loadCategories() {
   if (error) console.error("Error loading categories:", error);
   else if (data && data.length) {
     state.categories = data.map(c => c.name);
+  }
+}
+
+async function loadMenuCategories() {
+  if (!supabaseClient) return;
+  const { data, error } = await supabaseClient.from('menu_categories').select('*');
+  if (error) console.error("Error loading menu categories:", error);
+  else if (data) {
+    state.menuCategories = data;
   }
 }
 
@@ -1164,6 +1177,11 @@ function resetEndOfDay() {
   kitchenInvSubcatSelected = '__subcats__';
   adminInvSubcatSelected = '__subcats__';
   meseroCategorySelected = '__categories__';
+  adminMenuCategorySelected = '__categories__';
+  adminMenuSubcatSelected = '__subcats__';
+  state.expandedMenuCategories = {};
+  state.editingCategoryIndex = null;
+  state.managingCategoryDishesIndex = null;
   if (supabaseClient) {
     supabaseClient.from('orders').delete().eq('date', today)
       .then(({ error }) => { if (error) console.error('Error borrando pedidos de hoy:', error); });
@@ -1428,46 +1446,112 @@ function openCatModal() {
 }
 
 function renderCatList() {
-  document.getElementById('cat-list').innerHTML = state.categories.map((c,i)=>{
-    if (state.editingCategoryIndex === i) {
-      return `
-      <div style="display:flex;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid var(--gray-100);">
-        <input class="form-control" id="edit-cat-input" value="${c}">
-        <button class="btn-sm btn-primary" onclick="saveCategoryEdit(${i})">Guardar</button>
-        <button class="btn-sm btn-secondary" onclick="cancelCategoryEdit()">Cancelar</button>
-      </div>`;
-    }
-    const dishesOpen = state.managingCategoryDishesIndex === i;
-    const dishesPanel = dishesOpen ? `
-      <div style="padding:10px 0 14px;border-bottom:1px solid var(--gray-100);">
-        <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;">Marca los platos que pertenecen a "${c}":</div>
-        <div style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;">
-          ${state.menu.length ? state.menu.map(d => `
-            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
-              <input type="checkbox" class="cat-dish-check" data-dish-id="${d.id}" ${d.cat===c?'checked':''}>
-              <span>${d.emoji||'🍽️'} ${d.name}</span>
-              <span style="color:var(--gray-400);font-size:11px;">${d.cat && d.cat!==c ? '(actualmente en '+d.cat+')' : ''}</span>
-            </label>
-          `).join('') : '<div style="color:var(--gray-400);font-size:13px;">No hay platos creados aún</div>'}
+  const list = document.getElementById('cat-list');
+  if (!state.categories.length) {
+    list.innerHTML = `<div style="padding:20px;text-align:center;color:var(--gray-400);">No hay categorías creadas aún</div>`;
+    return;
+  }
+
+  list.innerHTML = state.categories.map((cat, idx) => {
+    const subcats = state.menuCategories.filter(mc => mc.parent_cat === cat).map(mc => mc.subcat);
+    const showSubcats = state.expandedMenuCategories && state.expandedMenuCategories[cat];
+    
+    const subcatsHtml = showSubcats ? `
+      <div style="background:var(--gray-50);border-radius:8px;padding:10px;margin-top:8px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+          <input class="form-control" id="new-subcat-input-${idx}" placeholder="Nueva subcategoría (ej: Hamburguesas)" style="flex:1;">
+          <button class="btn-sm btn-primary" onclick="addSubcategory('${cat}', ${idx})">+ Agregar</button>
         </div>
-        <div style="display:flex;gap:8px;margin-top:10px;">
-          <button class="btn-sm btn-primary" onclick="saveCategoryDishes(${i})">Guardar platos</button>
-          <button class="btn-sm btn-secondary" onclick="toggleCategoryDishes(${i})">Cerrar</button>
-        </div>
-      </div>` : '';
+        ${subcats.length ? `
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            ${subcats.map(sc => `
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--white);border-radius:6px;border-left:3px solid var(--orange);">
+                <span style="font-size:13px;font-weight:600;">📂 ${sc}</span>
+                <button class="btn-sm btn-delete" onclick="deleteSubcategory('${cat}', '${sc}')">🗑️</button>
+              </div>
+            `).join('')}
+          </div>
+        ` : `<div style="color:var(--gray-400);font-size:12px;padding:8px;">Sin subcategorías</div>`}
+      </div>
+    ` : '';
+
     return `
-    <div style="padding:10px 0;border-bottom:1px solid var(--gray-100);">
+    <div style="padding:12px 0;border-bottom:1px solid var(--gray-100);">
       <div style="display:flex;justify-content:space-between;align-items:center;">
-        <span style="font-size:14px;font-weight:600;">🏷️ ${c}</span>
+        <div style="flex:1;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:16px;font-weight:700;">📁 ${cat}</span>
+            <span style="font-size:11px;color:var(--gray-400);">(${subcats.length} subcategorías)</span>
+          </div>
+        </div>
         <div style="display:flex;gap:6px;">
-          <button class="btn-sm btn-blue" onclick="toggleCategoryDishes(${i})">🍽️ ${dishesOpen?'Ocultar platos':'Platos'}</button>
-          <button class="btn-sm btn-edit" onclick="startEditCategory(${i})">✏️ Editar</button>
-          <button class="btn-sm btn-delete" onclick="deleteCategory(${i})">Eliminar</button>
+          <button class="btn-sm btn-blue" onclick="toggleMenuCategorySubcats('${cat}')">
+            ${showSubcats ? '📂 Ocultar' : '📂 Ver'} subcategorías
+          </button>
+          <button class="btn-sm btn-edit" onclick="startEditMenuCategory(${idx})">✏️ Editar</button>
+          <button class="btn-sm btn-delete" onclick="deleteMenuCategory(${idx})">🗑️</button>
         </div>
       </div>
-      ${dishesPanel}
+      ${subcatsHtml}
     </div>`;
   }).join('');
+}
+
+function toggleMenuCategorySubcats(cat) {
+  if (!state.expandedMenuCategories) state.expandedMenuCategories = {};
+  state.expandedMenuCategories[cat] = !state.expandedMenuCategories[cat];
+  renderCatList();
+}
+
+function addSubcategory(parentCat, idx) {
+  const input = document.getElementById(`new-subcat-input-${idx}`);
+  const subcat = input.value.trim();
+  if (!subcat) { showToast('⚠️ El nombre no puede estar vacío', 'error'); return; }
+  
+  const existing = state.menuCategories.find(mc => mc.parent_cat === parentCat && mc.subcat === subcat);
+  if (existing) { showToast('Ya existe esa subcategoría en esta carpeta', 'error'); return; }
+  
+  const newMenuCat = { parent_cat: parentCat, subcat: subcat };
+  state.menuCategories.push(newMenuCat);
+  input.value = '';
+  renderCatList();
+  showToast('✅ Subcategoría agregada', 'success');
+  
+  if (supabaseClient) {
+    supabaseClient.from('menu_categories').insert([newMenuCat])
+      .then(({ error }) => { if (error) console.error(error); });
+  }
+}
+
+function deleteSubcategory(parentCat, subcat) {
+  if (!confirm(`¿Eliminar subcategoría "${subcat}"? Los platos en ella seguirán existiendo pero sin subcategoría.`)) return;
+  state.menuCategories = state.menuCategories.filter(mc => !(mc.parent_cat === parentCat && mc.subcat === subcat));
+  state.menu.forEach(d => { if (d.cat === parentCat && d.subcat === subcat) d.subcat = null; });
+  renderCatList();
+  renderAdminMenu();
+  renderMenuCards();
+  showToast('🗑️ Subcategoría eliminada', 'success');
+  
+  if (supabaseClient) {
+    supabaseClient.from('menu_categories').delete().eq('parent_cat', parentCat).eq('subcat', subcat)
+      .then(({ error }) => { if (error) console.error(error); });
+    state.menu.forEach(d => {
+      if (d.cat === parentCat && d.subcat === subcat) {
+        supabaseClient.from('menu').update({ subcat: null }).eq('id', d.id)
+          .then(({ error }) => { if (error) console.error(error); });
+      }
+    });
+  }
+}
+
+function startEditMenuCategory(i) {
+  state.editingCategoryIndex = i;
+  renderCatList();
+}
+
+function cancelCategoryEdit() {
+  state.editingCategoryIndex = null;
+  renderCatList();
 }
 
 function toggleCategoryDishes(i) {
@@ -1520,6 +1604,9 @@ function saveCategoryEdit(i) {
   state.editingCategoryIndex = null;
   // Los platos que pertenecían a la categoría vieja pasan a usar el nuevo nombre
   state.menu.forEach(d => { if (d.cat === oldVal) d.cat = val; });
+  // Las subcategorías heredan el nuevo nombre
+  state.menuCategories.forEach(mc => { if (mc.parent_cat === oldVal) mc.parent_cat = val; });
+  
   renderCatList();
   populateMeseroCat();
   renderDishCatSelect();
@@ -1531,6 +1618,8 @@ function saveCategoryEdit(i) {
     supabaseClient.from('categories').update({ name: val }).eq('name', oldVal)
       .then(({ error }) => { if (error) console.error(error); });
     supabaseClient.from('menu').update({ cat: val }).eq('cat', oldVal)
+      .then(({ error }) => { if (error) console.error(error); });
+    supabaseClient.from('menu_categories').update({ parent_cat: val }).eq('parent_cat', oldVal)
       .then(({ error }) => { if (error) console.error(error); });
   }
 }
@@ -1553,16 +1642,24 @@ function addCategory() {
 }
 
 function deleteCategory(i) {
-  if (!confirm('¿Eliminar categoría?')) return;
-  const val = state.categories[i];
-  state.categories.splice(i,1);
+  const cat = state.categories[i];
+  if (!confirm(`¿Eliminar categoría "${cat}"? Los platos en ella seguirán existiendo pero sin categoría.`)) return;
+  state.categories.splice(i, 1);
+  state.menu.forEach(d => { if (d.cat === cat) { d.cat = ''; d.subcat = null; } });
+  state.menuCategories = state.menuCategories.filter(mc => mc.parent_cat !== cat);
   renderCatList();
   populateMeseroCat();
   renderDishCatSelect();
+  renderAdminMenu();
+  renderMenuCards();
   showToast('🗑️ Categoría eliminada','success');
 
   if (supabaseClient) {
-    supabaseClient.from('categories').delete().eq('name', val)
+    supabaseClient.from('categories').delete().eq('name', cat)
+      .then(({ error }) => { if (error) console.error(error); });
+    supabaseClient.from('menu').update({ cat: '', subcat: null }).eq('cat', cat)
+      .then(({ error }) => { if (error) console.error(error); });
+    supabaseClient.from('menu_categories').delete().eq('parent_cat', cat)
       .then(({ error }) => { if (error) console.error(error); });
   }
 }
@@ -1570,6 +1667,30 @@ function deleteCategory(i) {
 function renderDishCatSelect() {
   const sel=document.getElementById('dish-cat');
   if (sel) sel.innerHTML=state.categories.map(c=>`<option>${c}</option>`).join('');
+}
+
+function renderDishSubcatSelect() {
+  const catInput = document.getElementById('dish-cat');
+  const subcatInput = document.getElementById('dish-subcat');
+  if (!subcatInput) return;
+  const selectedCat = catInput?.value || '';
+  const subcats = selectedCat ? state.menuCategories.filter(mc => mc.parent_cat === selectedCat).map(mc => mc.subcat) : [];
+  subcatInput.innerHTML = `<option value="">Sin subcategoría</option>` + subcats.map(s => `<option>${s}</option>`).join('');
+}
+
+function startEditMenuCategory(i) {
+  const cat = state.categories[i];
+  const input = document.createElement('input');
+  input.className = 'form-control';
+  input.id = 'edit-cat-input';
+  input.value = cat;
+  // This is handled by renderCatList now
+  state.editingCategoryIndex = i;
+  renderCatList();
+}
+
+function startEditCategory(i) {
+  startEditMenuCategory(i);
 }
 
 function renderConsumesModal(consumes) {
@@ -1724,6 +1845,8 @@ function openMenuModal(id) {
     document.getElementById('dish-price').value=d.price;
     document.getElementById('dish-qty').value=d.qty;
     document.getElementById('dish-cat').value=d.cat;
+    renderDishSubcatSelect();
+    document.getElementById('dish-subcat').value=d.subcat||'';
     document.getElementById('dish-desc').value=d.desc;
     document.getElementById('dish-emoji').value=d.emoji||'';
     renderConsumesModal(d.consumes||[]);
@@ -1731,6 +1854,9 @@ function openMenuModal(id) {
     document.getElementById('menu-modal-title').textContent='Agregar Plato';
     document.getElementById('edit-dish-id').value='';
     ['dish-name','dish-price','dish-qty','dish-desc','dish-emoji'].forEach(i=>document.getElementById(i).value='');
+    document.getElementById('dish-cat').value='';
+    renderDishSubcatSelect();
+    document.getElementById('dish-subcat').value='';
     renderConsumesModal([]);
   }
   m.classList.add('open');
@@ -1741,6 +1867,7 @@ function saveDish() {
   const price=parseInt(document.getElementById('dish-price').value);
   const qty=parseInt(document.getElementById('dish-qty').value);
   const cat=document.getElementById('dish-cat').value;
+  const subcat=document.getElementById('dish-subcat').value.trim()||null;
   const desc=document.getElementById('dish-desc').value.trim();
   const emoji=document.getElementById('dish-emoji').value.trim()||'🍽️';
   const editId=parseInt(document.getElementById('edit-dish-id').value);
@@ -1755,7 +1882,7 @@ function saveDish() {
   if (editId) {
     const d=state.menu.find(x=>x.id===editId);
     if (d) {
-      Object.assign(d,{name,price,qty,cat,desc,emoji,consumes});
+      Object.assign(d,{name,price,qty,cat,subcat,desc,emoji,consumes});
       if (supabaseClient) {
         supabaseClient.from('menu').upsert([d])
           .then(({ error }) => { if (error) console.error(error); });
@@ -1763,7 +1890,7 @@ function saveDish() {
     }
     showToast('✅ Plato actualizado','success');
   } else {
-    const newDish = {id:state.nextMenuId++,name,price,qty,cat,desc,emoji,consumes};
+    const newDish = {id:state.nextMenuId++,name,price,qty,cat,subcat,desc,emoji,consumes};
     state.menu.push(newDish);
     if (supabaseClient) {
       supabaseClient.from('menu').insert([newDish])
@@ -1860,6 +1987,13 @@ if (typeof window !== 'undefined') {
   window.renderKitchen = renderKitchen;
   window.renderAdminMenu = renderAdminMenu;
   window.renderMenuCards = renderMenuCards;
+  window.renderDishCatSelect = renderDishCatSelect;
+  window.renderDishSubcatSelect = renderDishSubcatSelect;
+  window.toggleMenuCategorySubcats = toggleMenuCategorySubcats;
+  window.addSubcategory = addSubcategory;
+  window.deleteSubcategory = deleteSubcategory;
+  window.startEditMenuCategory = startEditMenuCategory;
+  window.deleteMenuCategory = deleteMenuCategory;
   window.closeModal = closeModal;
   window.addConsumeRow = addConsumeRow;
 }
@@ -1949,6 +2083,12 @@ function refreshUIForTable(table) {
   } else if (table === 'categories') {
     populateMeseroCat();
     renderDishCatSelect();
+    if (role === 'mesero') {
+      renderMenuCards();
+    } else if (role === 'admin') {
+      renderAdminMenu();
+    }
+  } else if (table === 'menu_categories') {
     if (role === 'mesero') {
       renderMenuCards();
     } else if (role === 'admin') {
