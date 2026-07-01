@@ -4,10 +4,10 @@
 const state = {
   currentUser: null,
   users: [
-    { id: 1, name: 'Administrador', username: 'admin', pass: '1234', role: 'admin' },
-    { id: 2, name: 'Mesero Demo',   username: 'mesero', pass: '1234', role: 'mesero' },
-    { id: 3, name: 'Cocinero Demo', username: 'cocina', pass: '1234', role: 'cocina' },
-    { id: 4, name: 'Caja Demo',     username: 'caja', pass: '1234', role: 'caja' }
+    { id: 1, name: 'Administrador', username: 'admin', pass: '1211', role: 'admin' },
+    { id: 2, name: 'Mesero Demo',   username: 'mesero', pass: '1211', role: 'mesero' },
+    { id: 3, name: 'Cocinero Demo', username: 'cocina', pass: '1211', role: 'cocina' },
+    { id: 4, name: 'Caja Demo',     username: 'caja', pass: '1912', role: 'caja' }
   ],
   nextUserId: 5,
   categories: ['Entradas','Platos Fuertes','Sopas','Ensaladas','Bebidas','Postres','Especiales'],
