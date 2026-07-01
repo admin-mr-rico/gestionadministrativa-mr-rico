@@ -1850,8 +1850,16 @@ if (typeof window !== 'undefined') {
   window.confirmPayment = confirmPayment;
   window.cajaTab = cajaTab;
   window.selectInvCategory = selectInvCategory;
+  window.selectInvSubcat = selectInvSubcat;
   window.selectKitchenInvCategory = selectKitchenInvCategory;
+  window.selectKitchenInvSubcat = selectKitchenInvSubcat;
+  window.selectMeseroCategory = selectMeseroCategory;
+  window.toggleCategoryDishes = toggleCategoryDishes;
+  window.saveCategoryDishes = saveCategoryDishes;
   window.resetEndOfDay = resetEndOfDay;
+  window.renderKitchen = renderKitchen;
+  window.renderAdminMenu = renderAdminMenu;
+  window.renderMenuCards = renderMenuCards;
   window.closeModal = closeModal;
   window.addConsumeRow = addConsumeRow;
 }
