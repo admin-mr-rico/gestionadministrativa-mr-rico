@@ -17,18 +17,21 @@ const state = {
     { id:3, name:'Mojarra Frita', price:32000, qty:8, cat:'Platos Fuertes', desc:'Mojarra entera frita, crujiente. Acompañada de patacones y ensalada.', emoji:'🐟' },
     { id:4, name:'Lulada', price:6000, qty:20, cat:'Bebidas', desc:'Bebida refrescante de lulo con limón. Una delicia colombiana.', emoji:'🥤' },
     { id:5, name:'Arroz con Leche', price:8000, qty:12, cat:'Postres', desc:'Postre cremoso de arroz con leche, canela y panela.', emoji:'🍮' },
-    { id:6, name:'Ensalada de Pollo', price:18000, qty:6, cat:'Ensaladas', desc:'Pechuga asada sobre lechugas, tomate cherry, zanahoria y aderezo de limón.', emoji:'🥗' }
+    { id:6, name:'Ensalada de Pollo', price:18000, qty:6, cat:'Ensaladas', desc:'Pechuga asada sobre lechugas, tomate cherry, zanahoria y aderezo de limón.', emoji:'🥗' },
+    { id:7, name:'Michelada Ginger', price:12000, qty:15, cat:'Bebidas', desc:'Michelada preparada con cerveza y ginger ale.', emoji:'🍺' },
+    { id:8, name:'Michelada Soda', price:12000, qty:15, cat:'Bebidas', desc:'Michelada preparada con cerveza y soda.', emoji:'🍺' }
   ],
-  nextMenuId: 7,
+  nextMenuId: 9,
   inventory: [
     { id:1, name:'Coca-Cola 250ml', qty:48, unit:'unidades', min:12, cat:'Bebidas', emoji:'🥤' },
     { id:2, name:'Agua mineral', qty:30, unit:'unidades', min:10, cat:'Bebidas', emoji:'💧' },
     { id:3, name:'Pechuga de pollo', qty:15, unit:'kg', min:5, cat:'Carnes', emoji:'🍗' },
     { id:4, name:'Arroz', qty:20, unit:'kg', min:8, cat:'Granos', emoji:'🍚' },
     { id:5, name:'Aceite vegetal', qty:8, unit:'litros', min:3, cat:'Condimentos', emoji:'🫙' },
-    { id:6, name:'Fríjoles', qty:25, unit:'kg', min:10, cat:'Granos', emoji:'🫘' }
+    { id:6, name:'Fríjoles', qty:25, unit:'kg', min:10, cat:'Granos', emoji:'🫘' },
+    { id:7, name:'Cerveza', qty:30, unit:'unidades', min:10, cat:'Bebidas', emoji:'🍺' }
   ],
-  nextInvId: 7,
+  nextInvId: 8,
   tables: [
     { id:1, name:'Mesa 1', cap:4, zone:'Interior' },
     { id:2, name:'Mesa 2', cap:4, zone:'Interior' },
@@ -331,6 +334,7 @@ function activateScreen(role) {
     populateMeseroCat();
     renderMenuCards();
     renderPickupAlerts();
+    renderMeseroPedidos(); // Nueva función para ver sus pedidos
   } else if (role === 'cocina') {
     document.getElementById('screen-cocina').classList.add('active');
     renderKitchen();
@@ -382,11 +386,12 @@ function markDelivered(id) {
     }
   }
   renderPickupAlerts();
+  renderMeseroPedidos(); // actualizar lista de pedidos
   showToast(`✅ Pedido #${id} entregado`, 'success');
 }
 
 // Auto refresh for mesero pickup alerts
-setInterval(() => { if (state.currentUser?.role === 'mesero') renderPickupAlerts(); }, 10000);
+setInterval(() => { if (state.currentUser?.role === 'mesero') { renderPickupAlerts(); renderMeseroPedidos(); } }, 10000);
 
 // ═══════════════════════════════════════════
 //  MESERO – TABLES
@@ -488,8 +493,20 @@ function menuCardHTML(d, forOrder=false) {
 function addToOrder(id) {
   const d = state.menu.find(x=>x.id===id);
   if (!d||d.qty===0) return;
+  // Si es michelada, preguntar variante
+  let variant = null;
+  if (d.name.toLowerCase().includes('michelada')) {
+    // Mostrar un selector modal o prompt
+    const choice = confirm('¿Ginger? (Aceptar = Ginger, Cancelar = Soda)');
+    variant = choice ? 'Ginger' : 'Soda';
+  }
   const ex = state.currentOrder.find(i=>i.id===id);
-  if (ex) ex.qty++; else state.currentOrder.push({id:d.id,name:d.name,price:d.price,qty:1});
+  if (ex) {
+    ex.qty++;
+    if (variant) ex.variant = variant;
+  } else {
+    state.currentOrder.push({id:d.id, name:d.name, price:d.price, qty:1, variant});
+  }
   renderOrderPanel();
   showToast(`✓ ${d.name}`, 'success');
 }
@@ -514,7 +531,7 @@ function renderOrderPanel() {
   const total = state.currentOrder.reduce((s,i)=>s+i.price*i.qty,0);
   list.innerHTML = state.currentOrder.map(item=>`
     <div class="order-item">
-      <div class="order-item-name">${item.name}</div>
+      <div class="order-item-name">${item.name}${item.variant ? ` (${item.variant})` : ''}</div>
       <div class="qty-control">
         <button class="qty-btn" onclick="changeQty(${item.id},-1)">−</button>
         <span class="qty-num">${item.qty}</span>
@@ -610,25 +627,160 @@ async function sendOrder() {
     renderTablesGrid();
     showToast('✅ Guardado localmente (Modo sin internet)', 'success');
   }
+  renderMeseroPedidos();
+}
+
+// ═══════════════════════════════════════════
+//  MESERO – VER / EDITAR / ELIMINAR PEDIDOS
+// ═══════════════════════════════════════════
+function renderMeseroPedidos() {
+  const container = document.getElementById('mesero-pedidos-list');
+  if (!container) return;
+  const misPedidos = state.orders.filter(o => o.waiter_id === state.currentUser?.id);
+  if (!misPedidos.length) {
+    container.innerHTML = `<div class="empty-state" style="padding:20px 0;"><div class="icon">📋</div><p>No has creado pedidos</p></div>`;
+    return;
+  }
+  container.innerHTML = misPedidos.map(o => `
+    <div class="order-item-card" style="display:flex;justify-content:space-between;align-items:center;padding:12px;border-bottom:1px solid var(--gray-100);">
+      <div>
+        <strong>#${o.id}</strong> · ${o.table} · ${o.time} · 
+        <span class="badge ${o.status==='done'?'badge-success':o.status==='preparing'?'badge-warning':'badge-secondary'}">${o.status}</span>
+        <span class="badge ${o.payment==='paid'?'badge-success':'badge-secondary'}">${o.payment}</span>
+        <div style="font-size:12px;color:var(--gray-400);">${o.items.map(i=>`${i.qty}× ${i.name}${i.variant?' ('+i.variant+')':''}`).join(', ')}</div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn-sm btn-edit" onclick="openEditOrderModal(${o.id})">✏️ Editar</button>
+        <button class="btn-sm btn-delete" onclick="deleteOrder(${o.id})">🗑️</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function openEditOrderModal(orderId) {
+  const order = state.orders.find(o => o.id === orderId);
+  if (!order) return;
+  // Cargar los datos en el panel de edición (usamos un modal)
+  document.getElementById('edit-order-id').value = order.id;
+  document.getElementById('edit-order-table').value = order.table;
+  document.getElementById('edit-order-notes').value = order.notes || '';
+  // Cargar items en el contenedor
+  const container = document.getElementById('edit-order-items');
+  container.innerHTML = order.items.map((item, idx) => `
+    <div class="edit-order-item" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+      <span style="flex:1;">${item.name}${item.variant?' ('+item.variant+')':''}</span>
+      <input type="number" class="form-control" style="width:70px;" value="${item.qty}" min="1" data-idx="${idx}" onchange="updateEditItemQty(${orderId}, this)">
+      <button class="btn-sm btn-delete" onclick="removeEditItem(${orderId}, ${idx})">✕</button>
+    </div>
+  `).join('');
+  // Mostrar el modal
+  document.getElementById('edit-order-modal').classList.add('open');
+}
+
+function updateEditItemQty(orderId, input) {
+  const idx = parseInt(input.dataset.idx);
+  const order = state.orders.find(o => o.id === orderId);
+  if (!order) return;
+  const newQty = parseInt(input.value) || 0;
+  if (newQty <= 0) {
+    order.items.splice(idx, 1);
+  } else {
+    order.items[idx].qty = newQty;
+  }
+  // Recalcular total
+  order.total = order.items.reduce((sum, i) => sum + (i.price || 0) * i.qty, 0);
+  // Actualizar en Supabase
+  if (supabaseClient) {
+    supabaseClient.from('orders').update({ items: order.items, total: order.total }).eq('id', orderId)
+      .then(({ error }) => { if (error) console.error(error); });
+  }
+  // Refrescar la vista de edición
+  openEditOrderModal(orderId);
+  renderMeseroPedidos();
+  renderPickupAlerts();
+}
+
+function removeEditItem(orderId, idx) {
+  const order = state.orders.find(o => o.id === orderId);
+  if (!order) return;
+  order.items.splice(idx, 1);
+  if (order.items.length === 0) {
+    // Si no quedan items, eliminar el pedido
+    deleteOrder(orderId);
+    closeModal('edit-order-modal');
+    return;
+  }
+  order.total = order.items.reduce((sum, i) => sum + (i.price || 0) * i.qty, 0);
+  if (supabaseClient) {
+    supabaseClient.from('orders').update({ items: order.items, total: order.total }).eq('id', orderId)
+      .then(({ error }) => { if (error) console.error(error); });
+  }
+  openEditOrderModal(orderId);
+  renderMeseroPedidos();
+  renderPickupAlerts();
+}
+
+function saveEditOrder() {
+  const id = parseInt(document.getElementById('edit-order-id').value);
+  const order = state.orders.find(o => o.id === id);
+  if (!order) return;
+  const newTable = document.getElementById('edit-order-table').value.trim();
+  const newNotes = document.getElementById('edit-order-notes').value.trim();
+  order.table = newTable;
+  order.table_name = newTable;
+  order.notes = newNotes;
+  // Recalcular total (ya se actualizó con cambios de qty)
+  if (supabaseClient) {
+    supabaseClient.from('orders').update({ table_name: newTable, notes: newNotes, total: order.total }).eq('id', id)
+      .then(({ error }) => { if (error) console.error(error); });
+  }
+  closeModal('edit-order-modal');
+  renderMeseroPedidos();
+  renderPickupAlerts();
+  showToast('✅ Pedido actualizado', 'success');
+}
+
+function deleteOrder(id) {
+  if (!confirm('¿Eliminar este pedido permanentemente?')) return;
+  state.orders = state.orders.filter(o => o.id !== id);
+  if (supabaseClient) {
+    supabaseClient.from('orders').delete().eq('id', id)
+      .then(({ error }) => { if (error) console.error(error); });
+  }
+  renderMeseroPedidos();
+  renderPickupAlerts();
+  renderKitchen();
+  showToast('🗑️ Pedido eliminado', 'success');
 }
 
 // ═══════════════════════════════════════════
 //  COCINA
 // ═══════════════════════════════════════════
 function renderKitchen() {
+  // Mostrar solo pedidos pending y preparing, ordenados por hora ascendente (los más antiguos primero)
   const filter = document.getElementById('kitchen-filter').value;
-  const orders = state.orders.filter(o=>!filter||o.status===filter);
+  let orders = state.orders.filter(o => (o.status === 'pending' || o.status === 'preparing') && (o.status === filter || !filter));
+  // Ordenar por hora (time) de llegada
+  orders.sort((a, b) => {
+    // Convertir tiempo a minutos para comparar
+    const timeToMinutes = (t) => {
+      const parts = t.split(':');
+      return parseInt(parts[0])*60 + parseInt(parts[1]);
+    };
+    return timeToMinutes(a.time) - timeToMinutes(b.time);
+  });
   document.getElementById('k-pending').textContent   = state.orders.filter(o=>o.status==='pending').length;
   document.getElementById('k-preparing').textContent = state.orders.filter(o=>o.status==='preparing').length;
   document.getElementById('k-done').textContent      = state.orders.filter(o=>o.status==='done').length;
   const grid = document.getElementById('kitchen-grid');
   if (!orders.length) {
-    grid.innerHTML=`<div class="empty-state" style="grid-column:1/-1;"><div class="icon">🍳</div><p>Sin órdenes</p></div>`; return;
+    grid.innerHTML=`<div class="empty-state" style="grid-column:1/-1;"><div class="icon">🍳</div><p>Sin órdenes pendientes</p></div>`;
+    return;
   }
   const sClass={pending:'',preparing:'preparing',done:'done'};
   const sLabel={pending:'Pendiente',preparing:'Preparando',done:'Listo'};
   const sBadge={pending:'status-pending',preparing:'status-preparing',done:'status-done'};
-  grid.innerHTML = [...orders].reverse().map(o=>`
+  grid.innerHTML = orders.map(o=>`
     <div class="kitchen-card ${sClass[o.status]}">
       <div class="kitchen-card-header">
         <div>
@@ -637,7 +789,7 @@ function renderKitchen() {
         </div>
         <span class="kitchen-status ${sBadge[o.status]}">${sLabel[o.status]}</span>
       </div>
-      <div class="kitchen-items">${o.items.map(i=>`<div class="kitchen-item"><div><span class="kitchen-item-qty">×${i.qty}</span>${i.name}</div></div>`).join('')}</div>
+      <div class="kitchen-items">${o.items.map(i=>`<div class="kitchen-item"><div><span class="kitchen-item-qty">×${i.qty}</span>${i.name}${i.variant?' ('+i.variant+')':''}</div></div>`).join('')}</div>
       ${o.notes?`<div class="kitchen-notes">📝 ${o.notes}</div>`:''}
       <div class="kitchen-actions">${kitchenActionBtns(o)}</div>
     </div>`).join('');
@@ -646,7 +798,7 @@ function renderKitchen() {
 function kitchenActionBtns(o) {
   if (o.status==='pending')    return `<button class="btn-status btn-preparing" onclick="setOrderStatus(${o.id},'preparing')">🔥 Preparar</button>`;
   if (o.status==='preparing')  return `<button class="btn-status btn-done" onclick="setOrderStatus(${o.id},'done')">✅ Listo</button>`;
-  return `<span style="font-size:12px;color:var(--green);font-weight:700;">✅ Entregado al mesero</span>`;
+  return `<span style="font-size:12px;color:var(--green);font-weight:700;">✅ Listo</span>`;
 }
 
 function setOrderStatus(id, status) {
@@ -872,7 +1024,7 @@ function renderAdminVentas() {
     const itemsHtml = `<ul style="list-style:none;padding:0;margin:0;">${o.items.map(i=>{
       const unitPrice = i.price || (state.menu.find(m=>m.id===i.id)||{}).price || 0;
       const subtotal = unitPrice * i.qty;
-      return `<li style="padding:4px 0;">${i.qty}× ${i.name} — <small style="color:var(--gray-400);">$${unitPrice.toLocaleString()} c/u</small> <strong style="margin-left:8px;">$${subtotal.toLocaleString()}</strong></li>`;
+      return `<li style="padding:4px 0;">${i.qty}× ${i.name}${i.variant?' ('+i.variant+')':''} — <small style="color:var(--gray-400);">$${unitPrice.toLocaleString()} c/u</small> <strong style="margin-left:8px;">$${subtotal.toLocaleString()}</strong></li>`;
     }).join('')}</ul>`;
 
     const deliveryHtml = o.status !== 'done'
@@ -899,6 +1051,13 @@ function renderAdminVentas() {
       </td>
     </tr>`;
   }).join('');
+
+  // Agregar fila de total al final
+  const totalRow = document.createElement('tr');
+  totalRow.style.fontWeight = 'bold';
+  totalRow.style.borderTop = '2px solid var(--gray-400)';
+  totalRow.innerHTML = `<td colspan="4" style="text-align:right;">Total ventas del día</td><td colspan="6" style="color:var(--orange);">$${total.toLocaleString()}</td>`;
+  tbody.appendChild(totalRow);
 }
 
 function openPaymentModal(id) {
@@ -1586,8 +1745,7 @@ function saveCategoryDishes(i) {
 }
 
 function startEditCategory(i) {
-  state.editingCategoryIndex = i;
-  renderCatList();
+  startEditMenuCategory(i);
 }
 
 function cancelCategoryEdit() {
@@ -1716,18 +1874,269 @@ function addConsumeRow(invId, qty) {
 }
 
 // ═══════════════════════════════════════════
+//  CAJA – NUEVO PEDIDO (similar a mesero)
+// ═══════════════════════════════════════════
 function cajaTab(tab, btn) {
   document.querySelectorAll('#screen-caja .tab').forEach(t=>t.classList.remove('active'));
   btn.classList.add('active');
-  ['ventas','mesas','historial'].forEach(t=>{
+  ['ventas','mesas','historial','pedido'].forEach(t=>{
     const el = document.getElementById('caja-tab-'+t);
     if (el) el.style.display = t===tab ? '' : 'none';
   });
   if (tab==='ventas') renderCajaVentas();
   if (tab==='mesas') renderCajaTables();
   if (tab==='historial') renderCajaHistory();
+  if (tab==='pedido') renderCajaPedido();
 }
 
+// Función para renderizar el panel de pedido en caja
+function renderCajaPedido() {
+  // Reutilizamos la misma lógica que el mesero pero con un contenedor específico
+  const container = document.getElementById('caja-pedido-container');
+  if (!container) return;
+  // Copiamos el HTML del mesero pero adaptado
+  container.innerHTML = `
+    <div class="header-bar">
+      <div>
+        <div class="screen-title">Tomar Pedido 💼</div>
+        <div class="screen-subtitle">Selecciona los platos y crea el pedido</div>
+      </div>
+      <div class="inline-flex">
+        <div class="search-bar" style="min-width:200px;"><input type="text" placeholder="Buscar plato..." id="caja-search" oninput="renderCajaMenu()"></div>
+      </div>
+    </div>
+
+    <div id="caja-cat-nav" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;"></div>
+
+    <div class="grid-2" style="align-items:start;">
+      <div id="caja-menu-grid" class="menu-grid"></div>
+
+      <div class="order-panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <strong style="font-size:16px;">🛒 Pedido Actual</strong>
+          <button class="btn-sm btn-delete" onclick="clearCajaOrder()">Limpiar</button>
+        </div>
+
+        <div class="form-group" style="margin-bottom:10px;">
+          <label>MESA</label>
+          <div class="table-grid" id="caja-table-btn-grid"></div>
+          <input type="hidden" id="caja-order-table">
+        </div>
+
+        <div class="form-group" style="margin-bottom:10px;">
+          <label>NOTAS</label>
+          <textarea class="form-control" id="caja-order-notes" rows="2" placeholder="Sin cebolla, alergia..."></textarea>
+        </div>
+
+        <div id="caja-order-items-list">
+          <div class="empty-state" style="padding:20px 0;">
+            <div class="icon">🍽️</div>
+            <p>Sin platos</p><small>Selecciona del menú</small>
+          </div>
+        </div>
+
+        <div class="order-total" id="caja-order-total-section" style="display:none;">
+          <span class="total-label">Total</span>
+          <span class="total-amount" id="caja-order-total-amount">$0</span>
+        </div>
+
+        <button class="btn-send-order" onclick="sendCajaOrder()">📤 Enviar a Cocina</button>
+      </div>
+    </div>
+  `;
+  // Inicializar el estado de pedido de caja (usamos variables globales)
+  if (!window.cajaOrder) window.cajaOrder = { currentOrder: [], selectedTable: null };
+  renderCajaTableBtns();
+  populateCajaCat();
+  renderCajaMenu();
+}
+
+function renderCajaTableBtns() {
+  const g = document.getElementById('caja-table-btn-grid');
+  if (!g) return;
+  g.innerHTML = state.tables.map(t => `
+    <button class="table-btn ${window.cajaOrder.selectedTable===t.id?'selected':''}" onclick="selectCajaTable(${t.id},'${t.name}')">${t.name}</button>
+  `).join('');
+}
+
+function selectCajaTable(id, name) {
+  window.cajaOrder.selectedTable = id;
+  document.getElementById('caja-order-table').value = name;
+  renderCajaTableBtns();
+}
+
+function populateCajaCat() {
+  const nav = document.getElementById('caja-cat-nav');
+  if (!nav) return;
+  nav.innerHTML = `<button class="btn-sm" onclick="selectCajaCategory('all')">Ver todo</button>` +
+    state.categories.map(c=>`<button class="btn-sm" onclick="selectCajaCategory('${c}')">${c}</button>`).join('');
+}
+
+let cajaCategorySelected = 'all';
+function selectCajaCategory(cat) {
+  cajaCategorySelected = cat;
+  renderCajaMenu();
+}
+
+function renderCajaMenu() {
+  const search = (document.getElementById('caja-search')?.value||'').toLowerCase().trim();
+  const grid = document.getElementById('caja-menu-grid');
+  let filtered = state.menu.filter(d => {
+    const matchName = d.name.toLowerCase().includes(search);
+    const matchCat = cajaCategorySelected === 'all' || d.cat === cajaCategorySelected;
+    return matchName && matchCat;
+  });
+  if (!filtered.length) {
+    grid.innerHTML=`<div class="empty-state" style="grid-column:1/-1;"><div class="icon">🔍</div><p>Sin resultados</p></div>`;
+    return;
+  }
+  grid.innerHTML = filtered.map(d => menuCardHTML(d, true, 'caja')).join('');
+}
+
+// Sobrescribimos addToOrder para caja
+function addToCajaOrder(id) {
+  const d = state.menu.find(x=>x.id===id);
+  if (!d||d.qty===0) return;
+  let variant = null;
+  if (d.name.toLowerCase().includes('michelada')) {
+    const choice = confirm('¿Ginger? (Aceptar = Ginger, Cancelar = Soda)');
+    variant = choice ? 'Ginger' : 'Soda';
+  }
+  const order = window.cajaOrder;
+  const ex = order.currentOrder.find(i=>i.id===id);
+  if (ex) {
+    ex.qty++;
+    if (variant) ex.variant = variant;
+  } else {
+    order.currentOrder.push({id:d.id, name:d.name, price:d.price, qty:1, variant});
+  }
+  renderCajaOrderPanel();
+  showToast(`✓ ${d.name}`, 'success');
+}
+
+function changeCajaQty(id, delta) {
+  const order = window.cajaOrder;
+  const item = order.currentOrder.find(i=>i.id===id);
+  if (!item) return;
+  item.qty += delta;
+  if (item.qty<=0) order.currentOrder = order.currentOrder.filter(i=>i.id!==id);
+  renderCajaOrderPanel();
+}
+
+function clearCajaOrder() {
+  window.cajaOrder.currentOrder = [];
+  renderCajaOrderPanel();
+}
+
+function renderCajaOrderPanel() {
+  const list = document.getElementById('caja-order-items-list');
+  const totSec = document.getElementById('caja-order-total-section');
+  const order = window.cajaOrder;
+  if (!order.currentOrder.length) {
+    list.innerHTML=`<div class="empty-state" style="padding:20px 0;"><div class="icon">🍽️</div><p>Sin platos</p><small>Selecciona del menú</small></div>`;
+    totSec.style.display='none'; return;
+  }
+  const total = order.currentOrder.reduce((s,i)=>s+i.price*i.qty,0);
+  list.innerHTML = order.currentOrder.map(item=>`
+    <div class="order-item">
+      <div class="order-item-name">${item.name}${item.variant ? ` (${item.variant})` : ''}</div>
+      <div class="qty-control">
+        <button class="qty-btn" onclick="changeCajaQty(${item.id},-1)">−</button>
+        <span class="qty-num">${item.qty}</span>
+        <button class="qty-btn" onclick="changeCajaQty(${item.id},1)">+</button>
+      </div>
+      <div class="order-item-price">$${(item.price*item.qty).toLocaleString()}</div>
+    </div>`).join('');
+  document.getElementById('caja-order-total-amount').textContent='$'+total.toLocaleString();
+  totSec.style.display='flex';
+}
+
+async function sendCajaOrder() {
+  const tableName = document.getElementById('caja-order-table').value;
+  const notes = document.getElementById('caja-order-notes').value.trim();
+  if (!tableName) { showToast('⚠️ Selecciona una mesa', 'error'); return; }
+  const order = window.cajaOrder;
+  if (!order.currentOrder.length) { showToast('⚠️ El pedido está vacío', 'error'); return; }
+  
+  const total = order.currentOrder.reduce((s,i)=>s+i.price*i.qty,0);
+  
+  const newOrder = {
+    id: state.nextOrderId++,
+    table: tableName,
+    table_name: tableName,
+    waiter: state.currentUser.name,
+    waiter_id: state.currentUser.id,
+    notes,
+    items: [...order.currentOrder],
+    total,
+    status: 'pending',
+    payment: 'pending',
+    delivered: false,
+    time: new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}),
+    date: new Date().toLocaleDateString('es-CO'),
+    inventoryupdated: false
+  };
+
+  const orderForDb = {
+    id: newOrder.id,
+    table_name: newOrder.table_name,
+    waiter: newOrder.waiter,
+    waiter_id: newOrder.waiter_id,
+    notes: newOrder.notes,
+    items: newOrder.items,
+    total: newOrder.total,
+    status: newOrder.status,
+    payment: newOrder.payment,
+    delivered: newOrder.delivered,
+    time: newOrder.time,
+    date: newOrder.date,
+    inventoryupdated: newOrder.inventoryupdated
+  };
+
+  state.orders.push(newOrder);
+  
+  order.currentOrder.forEach(oi => {
+    const d = state.menu.find(x=>x.id===oi.id);
+    if (d) d.qty = Math.max(0, d.qty - oi.qty);
+  });
+
+  order.currentOrder = [];
+  window.cajaOrder.selectedTable = null;
+  document.getElementById('caja-order-notes').value='';
+  document.getElementById('caja-order-table').value='';
+  
+  renderCajaTableBtns();
+  renderCajaOrderPanel();
+  renderCajaMenu();
+  playAlertSound('kitchen');
+
+  if (supabaseClient) {
+    const { error } = await supabaseClient.from('orders').insert([orderForDb]);
+    if (error) {
+      console.error("Error al guardar en Supabase:", error.message);
+      showToast('⚠️ Error al sincronizar pedido en la nube', 'error');
+    } else {
+      showToast('✅ ¡Pedido enviado a cocina en tiempo real!', 'success');
+      logActivity(state.currentUser.name,'caja',`Creó pedido #${newOrder.id} – ${newOrder.table_name} ($${newOrder.total.toLocaleString()})`,'#FF6B1A');
+      newOrder.items.forEach(oi => {
+        const d = state.menu.find(x => x.id === oi.id);
+        if (d) {
+          supabaseClient.from('menu').update({ qty: d.qty }).eq('id', d.id)
+            .then(({ error }) => { if (error) console.error("Error updating menu qty:", error); });
+        }
+      });
+    }
+  } else {
+    showToast('✅ Guardado localmente (Modo sin internet)', 'success');
+  }
+  // Actualizar listas de pedidos en caja
+  renderCajaVentas();
+  renderCajaTables();
+}
+
+// ═══════════════════════════════════════════
+//  CAJA – VENTAS, MESAS, HISTORIAL
+// ═══════════════════════════════════════════
 function renderCajaVentas() {
   const today = new Date().toLocaleDateString('es-CO');
   const tod = state.orders.filter(o=>o.date===today);
@@ -1749,7 +2158,7 @@ function renderCajaVentas() {
     const itemsHtml = `<ul style="list-style:none;padding:0;margin:0;">${o.items.map(i=>{
       const unitPrice = i.price || (state.menu.find(m=>m.id===i.id)||{}).price || 0;
       const subtotal = unitPrice * i.qty;
-      return `<li style="padding:4px 0;">${i.qty}× ${i.name} — <small style="color:var(--gray-400);">$${unitPrice.toLocaleString()} c/u</small> <strong style="margin-left:8px;">$${subtotal.toLocaleString()}</strong></li>`;
+      return `<li style="padding:4px 0;">${i.qty}× ${i.name}${i.variant?' ('+i.variant+')':''} — <small style="color:var(--gray-400);">$${unitPrice.toLocaleString()} c/u</small> <strong style="margin-left:8px;">$${subtotal.toLocaleString()}</strong></li>`;
     }).join('')}</ul>`;
     const deliveryHtml = o.status !== 'done'
       ? `<span class="badge" style="background:var(--gray-100);color:var(--gray-500);">–</span>`
@@ -1770,6 +2179,13 @@ function renderCajaVentas() {
       <td>${o.payment!=='paid'?`<button class="btn-sm btn-green" onclick="openPaymentModal(${o.id})">Cobrar</button>`:''}</td>
     </tr>`;
   }).join('');
+
+  // Total de ventas al final
+  const totalRow = document.createElement('tr');
+  totalRow.style.fontWeight = 'bold';
+  totalRow.style.borderTop = '2px solid var(--gray-400)';
+  totalRow.innerHTML = `<td colspan="4" style="text-align:right;">Total ventas del día</td><td colspan="6" style="color:var(--orange);">$${total.toLocaleString()}</td>`;
+  tbody.appendChild(totalRow);
 }
 
 function renderCajaTables() {
@@ -1801,7 +2217,7 @@ function renderCajaHistory() {
       <td><strong>#${o.id}</strong></td>
       <td>${o.table}</td>
       <td style="font-size:12px;">${o.waiter}</td>
-      <td style="font-size:12px;">${o.items.map(i=>`${i.qty}× ${i.name}`).join('<br>')}</td>
+      <td style="font-size:12px;">${o.items.map(i=>`${i.qty}× ${i.name}${i.variant?' ('+i.variant+')':''}`).join('<br>')}</td>
       <td style="font-size:12px;color:var(--gray-400);">${o.notes||'–'}</td>
       <td><strong style="color:var(--orange);">$${o.total.toLocaleString()}</strong></td>
       <td><span class="badge" style="background:${sColor[o.status]};color:var(--gray-800);">${sText[o.status]}</span></td>
@@ -1811,6 +2227,7 @@ function renderCajaHistory() {
 }
 
 // ═══════════════════════════════════════════
+//  ADMIN – HISTORIAL
 // ═══════════════════════════════════════════
 function renderHistorial() {
   const tbody=document.getElementById('history-tbody');
@@ -1822,13 +2239,22 @@ function renderHistorial() {
       <td><strong>#${o.id}</strong></td>
       <td>${o.table}</td>
       <td style="font-size:12px;">${o.waiter}</td>
-      <td style="font-size:12px;">${o.items.map(i=>`${i.qty}× ${i.name}`).join('<br>')}</td>
+      <td style="font-size:12px;">${o.items.map(i=>`${i.qty}× ${i.name}${i.variant?' ('+i.variant+')':''}`).join('<br>')}</td>
       <td style="font-size:12px;color:var(--gray-400);">${o.notes||'–'}</td>
       <td><strong style="color:var(--orange);">$${o.total.toLocaleString()}</strong></td>
       <td><span class="badge" style="background:${sColor[o.status]};color:var(--gray-800);">${sText[o.status]}</span></td>
       <td><span class="badge ${o.payment==='paid'?'pay-paid':'pay-pending'}">${o.payment==='paid'?'✅ Pagado':'⏳ Pendiente'}</span></td>
       <td style="color:var(--gray-400);font-size:11px;">${o.date}<br>${o.time}</td>
     </tr>`).join('');
+
+  // Total de ventas del día al final del historial
+  const today = new Date().toLocaleDateString('es-CO');
+  const total = state.orders.filter(o=>o.date===today).reduce((s,o)=>s+o.total,0);
+  const totalRow = document.createElement('tr');
+  totalRow.style.fontWeight = 'bold';
+  totalRow.style.borderTop = '2px solid var(--gray-400)';
+  totalRow.innerHTML = `<td colspan="5" style="text-align:right;">Total ventas del día</td><td colspan="4" style="color:var(--orange);">$${total.toLocaleString()}</td>`;
+  tbody.appendChild(totalRow);
 }
 
 // ═══════════════════════════════════════════
@@ -1996,6 +2422,22 @@ if (typeof window !== 'undefined') {
   window.deleteMenuCategory = deleteMenuCategory;
   window.closeModal = closeModal;
   window.addConsumeRow = addConsumeRow;
+  // Nuevas funciones
+  window.renderMeseroPedidos = renderMeseroPedidos;
+  window.openEditOrderModal = openEditOrderModal;
+  window.saveEditOrder = saveEditOrder;
+  window.deleteOrder = deleteOrder;
+  window.updateEditItemQty = updateEditItemQty;
+  window.removeEditItem = removeEditItem;
+  window.renderCajaPedido = renderCajaPedido;
+  window.selectCajaTable = selectCajaTable;
+  window.addToCajaOrder = addToCajaOrder;
+  window.changeCajaQty = changeCajaQty;
+  window.clearCajaOrder = clearCajaOrder;
+  window.sendCajaOrder = sendCajaOrder;
+  window.selectCajaCategory = selectCajaCategory;
+  window.renderCajaMenu = renderCajaMenu;
+  window.populateCajaCat = populateCajaCat;
 }
 
 // 2. LISTENERS REALTIME: Actualiza la pantalla de cada dispositivo en vivo sin recargar la página
@@ -2039,6 +2481,7 @@ function refreshUIForTable(table) {
     if (role === 'mesero') {
       renderPickupAlerts();
       renderTableBtns();
+      renderMeseroPedidos();
     } else if (role === 'cocina') {
       renderKitchen();
     } else if (role === 'admin') {

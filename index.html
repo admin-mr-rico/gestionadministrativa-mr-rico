@@ -106,6 +106,17 @@
             <button class="btn-send-order" onclick="sendOrder()">📤 Enviar a Cocina</button>
           </div>
         </div>
+
+        <!-- MIS PEDIDOS -->
+        <div style="margin-top:40px;">
+          <div class="header-bar">
+            <div>
+              <div class="screen-title" style="font-size:18px;">Mis Pedidos 📋</div>
+              <div class="screen-subtitle">Pedidos que has creado</div>
+            </div>
+          </div>
+          <div id="mesero-pedidos-list"></div>
+        </div>
       </div>
 
       <!-- ══════════════════ COCINA ══════════════════ -->
@@ -121,7 +132,6 @@
               <option value="">Todos</option>
               <option value="pending">Pendientes</option>
               <option value="preparing">Preparando</option>
-              <option value="done">Listos</option>
             </select>
           </div>
         </div>
@@ -352,6 +362,7 @@
 
       </div><!-- /screen-admin -->
 
+      <!-- ══════════════════ CAJA ══════════════════ -->
       <div class="screen" id="screen-caja">
         <div class="screen-title">Caja 💼</div>
         <div class="screen-subtitle">Control de cobros y cierre de caja</div>
@@ -359,6 +370,7 @@
           <button class="tab active" onclick="cajaTab('ventas',this)">📈 Ventas</button>
           <button class="tab" onclick="cajaTab('mesas',this)">🪑 Mesas</button>
           <button class="tab" onclick="cajaTab('historial',this)">📋 Historial</button>
+          <button class="tab" onclick="cajaTab('pedido',this)">🛒 Nuevo Pedido</button>
         </div>
 
         <div id="caja-tab-ventas">
@@ -440,9 +452,31 @@
             </div>
           </div>
         </div>
+
+        <div id="caja-tab-pedido" style="display:none;">
+          <div id="caja-pedido-container"></div>
+        </div>
       </div>
 
     </main>
+  </div>
+
+  <!-- ══ MODAL EDICIÓN DE PEDIDO (Mesero/Caja) ══ -->
+  <div class="modal-overlay" id="edit-order-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">Editar Pedido</div><button class="btn-close" onclick="closeModal('edit-order-modal')">✕</button>
+      </div>
+      <input type="hidden" id="edit-order-id">
+      <div class="form-group"><label>MESA</label><input class="form-control" id="edit-order-table" placeholder="Mesa"></div>
+      <div class="form-group"><label>NOTAS</label><textarea class="form-control" id="edit-order-notes" rows="2"></textarea></div>
+      <div><strong>Items</strong></div>
+      <div id="edit-order-items"></div>
+      <div style="display:flex;gap:10px;margin-top:16px;">
+        <button class="btn-primary" onclick="saveEditOrder()">Guardar</button>
+        <button class="btn-secondary" onclick="closeModal('edit-order-modal')">Cancelar</button>
+      </div>
+    </div>
   </div>
 
   <!-- ══ MODAL PLATO ══ -->
@@ -587,6 +621,7 @@
     </div>
   </div>
 
+  <!-- ══ MODAL PAGO ══ -->
   <div class="modal-overlay" id="payment-modal">
     <div class="modal">
       <div class="modal-header">
@@ -608,17 +643,17 @@
 
   <div class="toast" id="toast"></div>
 
-<!-- Supabase client -->
-<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <!-- Supabase client -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
-<script src="./env.js"></script>
+  <script src="./env.js"></script>
 
-<script>
-window.SUPABASE_URL = window.SUPABASE_URL || 'REPLACE_WITH_SUPABASE_URL';
-window.SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || 'REPLACE_WITH_SUPABASE_ANON_KEY';
-</script>
+  <script>
+  window.SUPABASE_URL = window.SUPABASE_URL || 'REPLACE_WITH_SUPABASE_URL';
+  window.SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || 'REPLACE_WITH_SUPABASE_ANON_KEY';
+  </script>
 
-<script type="module" src="js/app.js"></script>
+  <script type="module" src="js/app.js"></script>
 
 </body>
 

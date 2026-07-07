@@ -233,3 +233,20 @@ main{flex:1;padding:24px;max-width:1280px;margin:0 auto;width:100%;}
   header{padding:0 16px;}
   .menu-grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));}
 }
+
+/* Nuevo estilo para lista de pedidos del mesero */
+.order-item-card {
+  background: var(--white);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  box-shadow: var(--shadow);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.order-item-card .badge {
+  margin-left: 4px;
+}
