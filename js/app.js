@@ -62,15 +62,13 @@ let adminMenuSubcatSelected = '__subcats__';
 let cajaCategorySelected = 'all';
 if (typeof window.cajaOrder === 'undefined') window.cajaOrder = { currentOrder: [], selectedTable: null };
 
-// Guardamos una copia de los usuarios y del menú por defecto para fallback local
 const DEFAULT_USERS = state.users.map(u => ({ ...u }));
 const DEFAULT_MENU = state.menu.map(d => ({ ...d }));
 
 // ──────────────────────────────────────────────────
-// Supabase integration (basic)
+// Supabase integration
 // ──────────────────────────────────────────────────
 let supabaseClient = null;
-
 const SUPABASE_URL = window.SUPABASE_URL || window.env?.SUPABASE_URL;
 const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || window.env?.SUPABASE_ANON_KEY;
 
@@ -83,7 +81,7 @@ if (SUPABASE_URL && SUPABASE_ANON_KEY) {
     console.warn('Error al inicializar Supabase:', e);
   }
 } else {
-  console.warn('Supabase no configurado en window.SUPABASE_URL ni en window.env. Revisa las variables de entorno.');
+  console.warn('Supabase no configurado en window.SUPABASE_URL ni en window.env.');
 }
 
 async function initSupabase() {
@@ -459,7 +457,6 @@ function menuCardHTML(d, forOrder=false, source='') {
   const sk = d.qty>5?'stock-ok':d.qty>0?'stock-low':'stock-out';
   const sl = d.qty>5?`${d.qty} disp.`:d.qty>0?`Solo ${d.qty}`:'Agotado';
   const dis = d.qty===0 ? 'style="opacity:.5;pointer-events:none;"' : '';
-  // Determinar qué función de agregar usar
   const addFn = source === 'caja' ? `addToCajaOrder(${d.id})` : `addToOrder(${d.id})`;
   const actions = forOrder
     ? `<button class="btn-sm btn-add-order" onclick="${addFn}">+ Agregar</button>`
@@ -479,9 +476,8 @@ function menuCardHTML(d, forOrder=false, source='') {
 // ═══════════════════════════════════════════
 //  MESERO – ORDER
 // ═══════════════════════════════════════════
-// Modal para elegir variante de michelada
 let pendingMicheladaDishId = null;
-let pendingMicheladaSource = null; // 'mesero' o 'caja' o 'edit'
+let pendingMicheladaSource = null;
 
 function showMicheladaModal(dishId, source) {
   pendingMicheladaDishId = dishId;
@@ -491,12 +487,16 @@ function showMicheladaModal(dishId, source) {
 
 // ═══ FUNCIÓN ÚNICA Y CORREGIDA ═══
 function selectMicheladaVariant(variant) {
+  console.log("selectMicheladaVariant called with variant:", variant, "pending id:", pendingMicheladaDishId, "source:", pendingMicheladaSource);
   const d = state.menu.find(x => x.id === pendingMicheladaDishId);
-  if (!d) return;
+  if (!d) {
+    console.error("No se encontró el plato con id:", pendingMicheladaDishId);
+    return;
+  }
   const source = pendingMicheladaSource || 'mesero';
+  console.log("Source:", source);
   
   if (source === 'edit') {
-    // Agregar al pedido en edición
     if (!editOrderData) return;
     const existing = editOrderData.items.find(i => i.id === d.id);
     if (existing) {
@@ -520,7 +520,6 @@ function selectMicheladaVariant(variant) {
     renderCajaOrderPanel();
     showToast(`✓ ${d.name} (${variant})`, 'success');
   } else {
-    // mesero
     const ex = state.currentOrder.find(i=>i.id===d.id);
     if (ex) {
       ex.qty++;
@@ -537,7 +536,6 @@ function selectMicheladaVariant(variant) {
 function addToOrder(id) {
   const d = state.menu.find(x=>x.id===id);
   if (!d||d.qty===0) return;
-  // Si es michelada, mostrar modal en lugar de confirm
   if (d.name.toLowerCase().includes('michelada')) {
     showMicheladaModal(id, 'mesero');
     return;
@@ -672,7 +670,6 @@ function renderMeseroPedidos() {
   const container = document.getElementById('mesero-pedidos-list');
   if (!container) return;
   const misPedidos = state.orders.filter(o => o.waiter_id === state.currentUser?.id);
-  // Ordenar por hora descendente (más reciente primero)
   misPedidos.sort((a, b) => {
     const timeToMinutes = (t) => {
       const parts = t.split(':');
@@ -703,39 +700,24 @@ function renderMeseroPedidos() {
 // ═══════════════════════════════════════════
 //  EDICIÓN DE PEDIDOS (Mesero y Caja)
 // ═══════════════════════════════════════════
-
-// Variable global para el pedido en edición
 let editOrderData = null;
 let editOrderSelectedTable = null;
 
 function openEditOrderModal(orderId) {
   const order = state.orders.find(o => o.id === orderId);
   if (!order) return;
-  
-  // Copiar el pedido para editarlo
   editOrderData = {
     ...order,
     items: order.items.map(item => ({ ...item })),
     originalId: order.id
   };
   editOrderSelectedTable = order.table_name || order.table;
-  
-  // Llenar el modal con los datos actuales
   document.getElementById('edit-order-id').value = order.id;
-
   document.getElementById('edit-order-notes').value = order.notes || '';
-  
-  // Renderizar selector de mesas
   renderEditTableGrid();
-  
-  // Renderizar items actuales
   renderEditOrderItems();
-  
-  // Limpiar resultados de búsqueda de platos
   document.getElementById('edit-add-dish-results').innerHTML = '';
   document.getElementById('edit-dish-search').value = '';
-  
-  // Abrir modal
   document.getElementById('edit-order-modal').classList.add('open');
 }
 
@@ -767,8 +749,6 @@ function renderEditOrderItems() {
       <button class="btn-sm btn-delete" onclick="removeEditItemByIndex(${idx})">✕</button>
     </div>
   `).join('');
-  
-  // Actualizar total
   const total = editOrderData.items.reduce((sum, i) => sum + (i.price || 0) * i.qty, 0);
   document.getElementById('edit-order-total').textContent = '$' + total.toLocaleString();
 }
@@ -786,7 +766,6 @@ function updateEditItemQtyByIndex(idx, input) {
 function removeEditItemByIndex(idx) {
   editOrderData.items.splice(idx, 1);
   if (editOrderData.items.length === 0) {
-    // Si no quedan items, preguntar si eliminar el pedido
     if (confirm('El pedido quedará vacío. ¿Deseas eliminarlo?')) {
       deleteOrder(editOrderData.originalId);
       closeModal('edit-order-modal');
@@ -796,11 +775,8 @@ function removeEditItemByIndex(idx) {
   renderEditOrderItems();
 }
 
-// ─── Agregar platos al pedido en edición ───
 function openEditAddDishModal() {
-  // Mostrar el modal de búsqueda de platos
   document.getElementById('edit-add-dish-modal').classList.add('open');
-  // Cargar categorías y menú
   populateEditDishCategories();
   renderEditDishMenu();
 }
@@ -846,12 +822,10 @@ function renderEditDishMenu() {
 function addDishToEditOrder(dishId) {
   const dish = state.menu.find(d => d.id === dishId);
   if (!dish) return;
-  // Si es michelada, mostrar modal de variante
   if (dish.name.toLowerCase().includes('michelada')) {
     showMicheladaModal(dishId, 'edit');
     return;
   }
-  // Agregar al pedido en edición
   const existing = editOrderData.items.find(i => i.id === dishId);
   if (existing) {
     existing.qty++;
@@ -859,20 +833,16 @@ function addDishToEditOrder(dishId) {
     editOrderData.items.push({ id: dish.id, name: dish.name, price: dish.price, qty: 1 });
   }
   renderEditOrderItems();
-  // Cerrar el modal de agregar platos
   closeModal('edit-add-dish-modal');
   showToast(`✓ ${dish.name} agregado`, 'success');
 }
 
-// Guardar cambios del pedido editado
 function saveEditOrder() {
   const orderId = parseInt(document.getElementById('edit-order-id').value);
   const originalOrder = state.orders.find(o => o.id === orderId);
   if (!originalOrder || !editOrderData) return;
-  
   const newNotes = document.getElementById('edit-order-notes').value.trim();
   const newTable = editOrderSelectedTable;
-  
   if (!newTable) {
     showToast('⚠️ Selecciona una mesa', 'error');
     return;
@@ -881,15 +851,11 @@ function saveEditOrder() {
     showToast('⚠️ El pedido no puede estar vacío', 'error');
     return;
   }
-  
-  // Actualizar el pedido original
   originalOrder.table = newTable;
   originalOrder.table_name = newTable;
   originalOrder.notes = newNotes;
   originalOrder.items = editOrderData.items.map(i => ({ ...i }));
   originalOrder.total = editOrderData.items.reduce((sum, i) => sum + (i.price || 0) * i.qty, 0);
-  
-  // Guardar en Supabase
   if (supabaseClient) {
     supabaseClient.from('orders').update({
       table_name: newTable,
@@ -899,15 +865,12 @@ function saveEditOrder() {
     }).eq('id', orderId)
       .then(({ error }) => { if (error) console.error('Error actualizando pedido:', error); });
   }
-  
-  // Refrescar vistas
   renderMeseroPedidos();
   renderCajaMisPedidos();
   renderKitchen();
   renderAdminVentas();
   renderCajaVentas();
   renderPickupAlerts();
-  
   closeModal('edit-order-modal');
   showToast('✅ Pedido actualizado', 'success');
 }
@@ -931,7 +894,6 @@ function deleteOrder(id) {
 function renderKitchen() {
   const filter = document.getElementById('kitchen-filter').value;
   let orders = state.orders.filter(o => (o.status === 'pending' || o.status === 'preparing') && (o.status === filter || !filter));
-  // Ordenar por hora ascendente (los más antiguos primero para priorizar)
   orders.sort((a, b) => {
     const timeToMinutes = (t) => {
       const parts = t.split(':');
@@ -1186,7 +1148,6 @@ function renderAdminVentas() {
   const sColor={pending:'#FFF8E1',preparing:'#FFF0E8',done:'#E8F5E9'};
   const sText={pending:'⏳ Pendiente',preparing:'🔥 Preparando',done:'✅ Listo'};
 
-  // Ordenar por hora descendente (más reciente primero)
   tod.sort((a,b) => {
     const timeToMinutes = (t) => {
       const parts = t.split(':');
@@ -1227,7 +1188,6 @@ function renderAdminVentas() {
     </tr>`;
   }).join('');
 
-  // Total de ventas del día
   const totalRow = document.createElement('tr');
   totalRow.style.fontWeight = 'bold';
   totalRow.style.borderTop = '2px solid var(--gray-400)';
@@ -2087,7 +2047,6 @@ function renderCajaMisPedidos() {
   const container = document.getElementById('caja-mis-pedidos');
   if (!container) return;
   const misPedidos = state.orders.filter(o => o.waiter_id === state.currentUser?.id);
-  // Ordenar por hora descendente (más reciente primero)
   misPedidos.sort((a, b) => {
     const timeToMinutes = (t) => {
       const parts = t.split(':');
@@ -2159,7 +2118,6 @@ function renderCajaMenu() {
 function addToCajaOrder(id) {
   const d = state.menu.find(x=>x.id===id);
   if (!d||d.qty===0) return;
-  // Si es michelada, mostrar modal
   if (d.name.toLowerCase().includes('michelada')) {
     showMicheladaModal(id, 'caja');
     return;
@@ -2316,7 +2274,6 @@ function renderCajaVentas() {
   const sColor={pending:'#FFF8E1',preparing:'#FFF0E8',done:'#E8F5E9'};
   const sText={pending:'⏳ Pendiente',preparing:'🔥 Preparando',done:'✅ Listo'};
   
-  // Ordenar por hora descendente
   tod.sort((a,b) => {
     const timeToMinutes = (t) => {
       const parts = t.split(':');
@@ -2382,13 +2339,10 @@ function renderCajaHistory() {
   if (!state.orders.length) { tbody.innerHTML=`<tr><td colspan="9" style="text-align:center;color:var(--gray-400);padding:32px;">Sin pedidos</td></tr>`; return; }
   const sColor={pending:'#FFF8E1',preparing:'#FFF0E8',done:'#E8F5E9'};
   const sText={pending:'⏳ Pendiente',preparing:'🔥 Preparando',done:'✅ Listo'};
-  // Ordenar por fecha y hora descendente (más reciente primero)
   const sorted = [...state.orders].sort((a,b) => {
-    // Primero por fecha (asumiendo formato DD/MM/YYYY)
     const dateA = a.date.split('/').reverse().join('-');
     const dateB = b.date.split('/').reverse().join('-');
     if (dateA !== dateB) return dateB.localeCompare(dateA);
-    // Luego por hora
     const timeToMinutes = (t) => {
       const parts = t.split(':');
       return parseInt(parts[0])*60 + parseInt(parts[1]);
@@ -2417,7 +2371,6 @@ function renderHistorial() {
   if (!state.orders.length) { tbody.innerHTML=`<tr><td colspan="9" style="text-align:center;color:var(--gray-400);padding:32px;">Sin pedidos</td></tr>`; return; }
   const sColor={pending:'#FFF8E1',preparing:'#FFF0E8',done:'#E8F5E9'};
   const sText={pending:'⏳ Pendiente',preparing:'🔥 Preparando',done:'✅ Listo'};
-  // Ordenar por fecha y hora descendente
   const sorted = [...state.orders].sort((a,b) => {
     const dateA = a.date.split('/').reverse().join('-');
     const dateB = b.date.split('/').reverse().join('-');
@@ -2616,8 +2569,8 @@ if (typeof window !== 'undefined') {
   window.openEditOrderModal = openEditOrderModal;
   window.saveEditOrder = saveEditOrder;
   window.deleteOrder = deleteOrder;
-  window.updateEditItemQty = updateEditItemQty;
-  window.removeEditItem = removeEditItem;
+  window.updateEditItemQtyByIndex = updateEditItemQtyByIndex;
+  window.removeEditItemByIndex = removeEditItemByIndex;
   // Caja
   window.renderCajaPedido = renderCajaPedido;
   window.selectCajaTable = selectCajaTable;
