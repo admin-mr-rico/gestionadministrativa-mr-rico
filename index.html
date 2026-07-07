@@ -462,22 +462,51 @@
   </div>
 
   <!-- ══ MODAL EDICIÓN DE PEDIDO (Mesero/Caja) ══ -->
-  <div class="modal-overlay" id="edit-order-modal">
-    <div class="modal">
-      <div class="modal-header">
-        <div class="modal-title">Editar Pedido</div><button class="btn-close" onclick="closeModal('edit-order-modal')">✕</button>
-      </div>
-      <input type="hidden" id="edit-order-id">
-      <div class="form-group"><label>MESA</label><input class="form-control" id="edit-order-table" placeholder="Mesa"></div>
-      <div class="form-group"><label>NOTAS</label><textarea class="form-control" id="edit-order-notes" rows="2"></textarea></div>
-      <div><strong>Items</strong></div>
-      <div id="edit-order-items"></div>
-      <div style="display:flex;gap:10px;margin-top:16px;">
-        <button class="btn-primary" onclick="saveEditOrder()">Guardar</button>
-        <button class="btn-secondary" onclick="closeModal('edit-order-modal')">Cancelar</button>
-      </div>
+ <div class="modal-overlay" id="edit-order-modal">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-header">
+      <div class="modal-title">Editar Pedido</div>
+      <button class="btn-close" onclick="closeModal('edit-order-modal')">✕</button>
+    </div>
+    <input type="hidden" id="edit-order-id">
+    <div class="form-group">
+      <label>MESA</label>
+      <div class="table-grid" id="edit-table-btn-grid"></div>
+    </div>
+    <div class="form-group">
+      <label>NOTAS</label>
+      <textarea class="form-control" id="edit-order-notes" rows="2"></textarea>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">
+      <strong>Items</strong>
+      <button class="btn-sm btn-primary" onclick="openEditAddDishModal()">➕ Agregar plato</button>
+    </div>
+    <div id="edit-order-items" style="margin-top:8px;"></div>
+    <div class="order-total" style="margin-top:12px;">
+      <span class="total-label">Total</span>
+      <span class="total-amount" id="edit-order-total">$0</span>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="btn-primary" onclick="saveEditOrder()">Guardar</button>
+      <button class="btn-secondary" onclick="closeModal('edit-order-modal')">Cancelar</button>
     </div>
   </div>
+</div>
+
+  <!-- ══ MODAL PARA AGREGAR PLATOS EN EDICIÓN ══ -->
+<div class="modal-overlay" id="edit-add-dish-modal">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-header">
+      <div class="modal-title">➕ Agregar plato</div>
+      <button class="btn-close" onclick="closeModal('edit-add-dish-modal')">✕</button>
+    </div>
+    <div class="form-group">
+      <input class="form-control" id="edit-dish-search" placeholder="Buscar plato..." oninput="renderEditDishMenu()">
+    </div>
+    <div id="edit-dish-cat-nav" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;"></div>
+    <div id="edit-add-dish-results" class="menu-grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));max-height:400px;overflow-y:auto;"></div>
+  </div>
+</div>
 
   <!-- ══ MODAL PLATO ══ -->
   <div class="modal-overlay" id="menu-modal">

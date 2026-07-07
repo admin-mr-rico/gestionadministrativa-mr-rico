@@ -686,78 +686,266 @@ function renderMeseroPedidos() {
   `).join('');
 }
 
+// ═══════════════════════════════════════════
+//  EDICIÓN DE PEDIDOS (Mesero y Caja)
+// ═══════════════════════════════════════════
+
+// Variable global para el pedido en edición
+let editOrderData = null;
+let editOrderSelectedTable = null;
+
 function openEditOrderModal(orderId) {
   const order = state.orders.find(o => o.id === orderId);
   if (!order) return;
+  
+  // Copiar el pedido para editarlo
+  editOrderData = {
+    ...order,
+    items: order.items.map(item => ({ ...item })),
+    originalId: order.id
+  };
+  editOrderSelectedTable = order.table_name || order.table;
+  
+  // Llenar el modal con los datos actuales
   document.getElementById('edit-order-id').value = order.id;
-  document.getElementById('edit-order-table').value = order.table;
+
   document.getElementById('edit-order-notes').value = order.notes || '';
-  const container = document.getElementById('edit-order-items');
-  container.innerHTML = order.items.map((item, idx) => `
-    <div class="edit-order-item" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-      <span style="flex:1;">${item.name}${item.variant?' ('+item.variant+')':''}</span>
-      <input type="number" class="form-control" style="width:70px;" value="${item.qty}" min="1" data-idx="${idx}" onchange="updateEditItemQty(${orderId}, this)">
-      <button class="btn-sm btn-delete" onclick="removeEditItem(${orderId}, ${idx})">✕</button>
-    </div>
-  `).join('');
+  
+  // Renderizar selector de mesas
+  renderEditTableGrid();
+  
+  // Renderizar items actuales
+  renderEditOrderItems();
+  
+  // Limpiar resultados de búsqueda de platos
+  document.getElementById('edit-add-dish-results').innerHTML = '';
+  document.getElementById('edit-dish-search').value = '';
+  
+  // Abrir modal
   document.getElementById('edit-order-modal').classList.add('open');
 }
 
-function updateEditItemQty(orderId, input) {
-  const idx = parseInt(input.dataset.idx);
-  const order = state.orders.find(o => o.id === orderId);
-  if (!order) return;
-  const newQty = parseInt(input.value) || 0;
-  if (newQty <= 0) {
-    order.items.splice(idx, 1);
-  } else {
-    order.items[idx].qty = newQty;
-  }
-  order.total = order.items.reduce((sum, i) => sum + (i.price || 0) * i.qty, 0);
-  if (supabaseClient) {
-    supabaseClient.from('orders').update({ items: order.items, total: order.total }).eq('id', orderId)
-      .then(({ error }) => { if (error) console.error(error); });
-  }
-  openEditOrderModal(orderId);
-  renderMeseroPedidos();
-  renderPickupAlerts();
+function renderEditTableGrid() {
+  const grid = document.getElementById('edit-table-btn-grid');
+  if (!grid) return;
+  grid.innerHTML = state.tables.map(t => `
+    <button class="table-btn ${editOrderSelectedTable === t.name ? 'selected' : ''}" 
+            onclick="selectEditTable('${t.name}')">${t.name}</button>
+  `).join('');
 }
 
-function removeEditItem(orderId, idx) {
-  const order = state.orders.find(o => o.id === orderId);
-  if (!order) return;
-  order.items.splice(idx, 1);
-  if (order.items.length === 0) {
-    deleteOrder(orderId);
-    closeModal('edit-order-modal');
+function selectEditTable(tableName) {
+  editOrderSelectedTable = tableName;
+  renderEditTableGrid();
+}
+
+function renderEditOrderItems() {
+  const container = document.getElementById('edit-order-items');
+  if (!editOrderData || !editOrderData.items.length) {
+    container.innerHTML = `<div class="empty-state" style="padding:12px 0;"><p>Sin platos</p></div>`;
     return;
   }
-  order.total = order.items.reduce((sum, i) => sum + (i.price || 0) * i.qty, 0);
-  if (supabaseClient) {
-    supabaseClient.from('orders').update({ items: order.items, total: order.total }).eq('id', orderId)
-      .then(({ error }) => { if (error) console.error(error); });
-  }
-  openEditOrderModal(orderId);
-  renderMeseroPedidos();
-  renderPickupAlerts();
+  container.innerHTML = editOrderData.items.map((item, idx) => `
+    <div class="edit-order-item" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;padding:6px;background:var(--gray-50);border-radius:6px;">
+      <span style="flex:1;font-size:13px;">${item.name}${item.variant ? ' ('+item.variant+')' : ''}</span>
+      <input type="number" class="form-control" style="width:70px;" value="${item.qty}" min="1" 
+             data-idx="${idx}" onchange="updateEditItemQtyByIndex(${idx}, this)">
+      <button class="btn-sm btn-delete" onclick="removeEditItemByIndex(${idx})">✕</button>
+    </div>
+  `).join('');
+  
+  // Actualizar total
+  const total = editOrderData.items.reduce((sum, i) => sum + (i.price || 0) * i.qty, 0);
+  document.getElementById('edit-order-total').textContent = '$' + total.toLocaleString();
 }
 
-function saveEditOrder() {
-  const id = parseInt(document.getElementById('edit-order-id').value);
-  const order = state.orders.find(o => o.id === id);
-  if (!order) return;
-  const newTable = document.getElementById('edit-order-table').value.trim();
-  const newNotes = document.getElementById('edit-order-notes').value.trim();
-  order.table = newTable;
-  order.table_name = newTable;
-  order.notes = newNotes;
-  if (supabaseClient) {
-    supabaseClient.from('orders').update({ table_name: newTable, notes: newNotes, total: order.total }).eq('id', id)
-      .then(({ error }) => { if (error) console.error(error); });
+function updateEditItemQtyByIndex(idx, input) {
+  const newQty = parseInt(input.value) || 0;
+  if (newQty <= 0) {
+    editOrderData.items.splice(idx, 1);
+  } else {
+    editOrderData.items[idx].qty = newQty;
   }
-  closeModal('edit-order-modal');
+  renderEditOrderItems();
+}
+
+function removeEditItemByIndex(idx) {
+  editOrderData.items.splice(idx, 1);
+  if (editOrderData.items.length === 0) {
+    // Si no quedan items, preguntar si eliminar el pedido
+    if (confirm('El pedido quedará vacío. ¿Deseas eliminarlo?')) {
+      deleteOrder(editOrderData.originalId);
+      closeModal('edit-order-modal');
+      return;
+    }
+  }
+  renderEditOrderItems();
+}
+
+// ─── Agregar platos al pedido en edición ───
+function openEditAddDishModal() {
+  // Mostrar el modal de búsqueda de platos (reutilizamos un modal existente o creamos uno)
+  document.getElementById('edit-add-dish-modal').classList.add('open');
+  // Cargar categorías y menú
+  populateEditDishCategories();
+  renderEditDishMenu();
+}
+
+function populateEditDishCategories() {
+  const nav = document.getElementById('edit-dish-cat-nav');
+  if (!nav) return;
+  nav.innerHTML = `<button class="btn-sm" onclick="filterEditDishMenu('all')">Ver todo</button>` +
+    state.categories.map(c => `<button class="btn-sm" onclick="filterEditDishMenu('${c}')">${c}</button>`).join('');
+}
+
+let editDishCategoryFilter = 'all';
+
+function filterEditDishMenu(cat) {
+  editDishCategoryFilter = cat;
+  renderEditDishMenu();
+}
+
+function renderEditDishMenu() {
+  const search = document.getElementById('edit-dish-search')?.value?.toLowerCase() || '';
+  const grid = document.getElementById('edit-add-dish-results');
+  let filtered = state.menu.filter(d => {
+    const matchName = d.name.toLowerCase().includes(search);
+    const matchCat = editDishCategoryFilter === 'all' || d.cat === editDishCategoryFilter;
+    return matchName && matchCat && d.qty > 0;
+  });
+  if (!filtered.length) {
+    grid.innerHTML = `<div class="empty-state" style="padding:12px 0;"><div class="icon">🔍</div><p>Sin platos disponibles</p></div>`;
+    return;
+  }
+  grid.innerHTML = filtered.map(d => `
+    <div class="menu-card" style="cursor:pointer;" onclick="addDishToEditOrder(${d.id})">
+      <div class="menu-card-img" style="font-size:28px;">${d.emoji||'🍽️'}</div>
+      <div class="menu-card-body" style="padding:8px;">
+        <div class="menu-card-name" style="font-size:13px;">${d.name}</div>
+        <div class="menu-card-price" style="font-size:14px;">$${d.price.toLocaleString()}</div>
+        <div class="menu-card-stock ${d.qty>5?'stock-ok':'stock-low'}" style="font-size:10px;">${d.qty} disp.</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function addDishToEditOrder(dishId) {
+  const dish = state.menu.find(d => d.id === dishId);
+  if (!dish) return;
+  // Si es michelada, preguntar variante
+  let variant = null;
+  if (dish.name.toLowerCase().includes('michelada')) {
+    // Usar un modal pequeño o confirm (pero usaremos el modal de variante)
+    showMicheladaModal(dishId, 'edit');
+    return;
+  }
+  // Agregar al pedido en edición
+  const existing = editOrderData.items.find(i => i.id === dishId);
+  if (existing) {
+    existing.qty++;
+  } else {
+    editOrderData.items.push({ id: dish.id, name: dish.name, price: dish.price, qty: 1 });
+  }
+  renderEditOrderItems();
+  // Cerrar el modal de agregar platos
+  closeModal('edit-add-dish-modal');
+  showToast(`✓ ${dish.name} agregado`, 'success');
+}
+
+// Sobrescribir la función global de michelada para que funcione con edición
+// (ya existe, pero debemos asegurar que maneje el caso 'edit')
+// Modificamos la función selectMicheladaVariant para que soporte 'edit'
+// La función original ya está, pero la ajustamos para que si el source es 'edit', agregue a editOrderData.
+
+// Reemplazar selectMicheladaVariant (ya existe, pero la sobrescribimos con esta versión mejorada)
+function selectMicheladaVariant(variant) {
+  const d = state.menu.find(x => x.id === pendingMicheladaDishId);
+  if (!d) return;
+  const source = pendingMicheladaSource || 'mesero';
+  
+  if (source === 'edit') {
+    // Agregar al pedido en edición
+    const existing = editOrderData.items.find(i => i.id === d.id);
+    if (existing) {
+      existing.qty++;
+      existing.variant = variant;
+    } else {
+      editOrderData.items.push({ id: d.id, name: d.name, price: d.price, qty: 1, variant });
+    }
+    renderEditOrderItems();
+    closeModal('edit-add-dish-modal');
+    showToast(`✓ ${d.name} (${variant})`, 'success');
+  } else if (source === 'caja') {
+    const order = window.cajaOrder;
+    const ex = order.currentOrder.find(i=>i.id===d.id);
+    if (ex) {
+      ex.qty++;
+      ex.variant = variant;
+    } else {
+      order.currentOrder.push({id:d.id, name:d.name, price:d.price, qty:1, variant});
+    }
+    renderCajaOrderPanel();
+    showToast(`✓ ${d.name} (${variant})`, 'success');
+  } else {
+    // mesero
+    const ex = state.currentOrder.find(i=>i.id===d.id);
+    if (ex) {
+      ex.qty++;
+      ex.variant = variant;
+    } else {
+      state.currentOrder.push({id:d.id, name:d.name, price:d.price, qty:1, variant});
+    }
+    renderOrderPanel();
+    showToast(`✓ ${d.name} (${variant})`, 'success');
+  }
+  closeModal('michelada-modal');
+}
+
+// Guardar cambios del pedido editado
+function saveEditOrder() {
+  const orderId = parseInt(document.getElementById('edit-order-id').value);
+  const originalOrder = state.orders.find(o => o.id === orderId);
+  if (!originalOrder || !editOrderData) return;
+  
+  const newNotes = document.getElementById('edit-order-notes').value.trim();
+  const newTable = editOrderSelectedTable;
+  
+  if (!newTable) {
+    showToast('⚠️ Selecciona una mesa', 'error');
+    return;
+  }
+  if (!editOrderData.items.length) {
+    showToast('⚠️ El pedido no puede estar vacío', 'error');
+    return;
+  }
+  
+  // Actualizar el pedido original
+  originalOrder.table = newTable;
+  originalOrder.table_name = newTable;
+  originalOrder.notes = newNotes;
+  originalOrder.items = editOrderData.items.map(i => ({ ...i }));
+  originalOrder.total = editOrderData.items.reduce((sum, i) => sum + (i.price || 0) * i.qty, 0);
+  
+  // Guardar en Supabase
+  if (supabaseClient) {
+    supabaseClient.from('orders').update({
+      table_name: newTable,
+      notes: newNotes,
+      items: originalOrder.items,
+      total: originalOrder.total
+    }).eq('id', orderId)
+      .then(({ error }) => { if (error) console.error('Error actualizando pedido:', error); });
+  }
+  
+  // Refrescar vistas
   renderMeseroPedidos();
+  renderCajaMisPedidos();
+  renderKitchen();
+  renderAdminVentas();
+  renderCajaVentas();
   renderPickupAlerts();
+  
+  closeModal('edit-order-modal');
   showToast('✅ Pedido actualizado', 'success');
 }
 
