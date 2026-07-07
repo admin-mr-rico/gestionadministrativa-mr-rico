@@ -482,19 +482,14 @@ let pendingMicheladaSource = null;
 function showMicheladaModal(dishId, source) {
   pendingMicheladaDishId = dishId;
   pendingMicheladaSource = source;
-  document.getElementById('michelada-modal').classList.add('open');
+  const modal = document.getElementById('michelada-modal');
+  if (modal) modal.classList.add('open');
 }
 
-// ═══ FUNCIÓN ÚNICA Y CORREGIDA ═══
 function selectMicheladaVariant(variant) {
-  console.log("selectMicheladaVariant called with variant:", variant, "pending id:", pendingMicheladaDishId, "source:", pendingMicheladaSource);
   const d = state.menu.find(x => x.id === pendingMicheladaDishId);
-  if (!d) {
-    console.error("No se encontró el plato con id:", pendingMicheladaDishId);
-    return;
-  }
+  if (!d) return;
   const source = pendingMicheladaSource || 'mesero';
-  console.log("Source:", source);
   
   if (source === 'edit') {
     if (!editOrderData) return;
@@ -670,8 +665,10 @@ function renderMeseroPedidos() {
   const container = document.getElementById('mesero-pedidos-list');
   if (!container) return;
   const misPedidos = state.orders.filter(o => o.waiter_id === state.currentUser?.id);
+  // Orden descendente (más reciente primero)
   misPedidos.sort((a, b) => {
     const timeToMinutes = (t) => {
+      if (!t) return 0;
       const parts = t.split(':');
       return parseInt(parts[0])*60 + parseInt(parts[1]);
     };
@@ -706,7 +703,7 @@ let editOrderSelectedTable = null;
 function openEditOrderModal(orderId) {
   const modal = document.getElementById('edit-order-modal');
   if (!modal) {
-    console.error('No se encontró el modal de edición (edit-order-modal) en el DOM');
+    console.error('Modal de edición no encontrado en el DOM');
     showToast('Error: el modal de edición no está disponible', 'error');
     return;
   }
@@ -725,7 +722,6 @@ function openEditOrderModal(orderId) {
   document.getElementById('edit-order-notes').value = order.notes || '';
   renderEditTableGrid();
   renderEditOrderItems();
-  // Limpiar resultados de búsqueda de platos
   const results = document.getElementById('edit-add-dish-results');
   if (results) results.innerHTML = '';
   const search = document.getElementById('edit-dish-search');
@@ -749,6 +745,7 @@ function selectEditTable(tableName) {
 
 function renderEditOrderItems() {
   const container = document.getElementById('edit-order-items');
+  if (!container) return;
   if (!editOrderData || !editOrderData.items.length) {
     container.innerHTML = `<div class="empty-state" style="padding:12px 0;"><p>Sin platos</p></div>`;
     return;
@@ -762,7 +759,8 @@ function renderEditOrderItems() {
     </div>
   `).join('');
   const total = editOrderData.items.reduce((sum, i) => sum + (i.price || 0) * i.qty, 0);
-  document.getElementById('edit-order-total').textContent = '$' + total.toLocaleString();
+  const totalEl = document.getElementById('edit-order-total');
+  if (totalEl) totalEl.textContent = '$' + total.toLocaleString();
 }
 
 function updateEditItemQtyByIndex(idx, input) {
@@ -788,7 +786,12 @@ function removeEditItemByIndex(idx) {
 }
 
 function openEditAddDishModal() {
-  document.getElementById('edit-add-dish-modal').classList.add('open');
+  const modal = document.getElementById('edit-add-dish-modal');
+  if (!modal) {
+    showToast('Error: modal de agregar plato no disponible', 'error');
+    return;
+  }
+  modal.classList.add('open');
   populateEditDishCategories();
   renderEditDishMenu();
 }
@@ -810,6 +813,7 @@ function filterEditDishMenu(cat) {
 function renderEditDishMenu() {
   const search = document.getElementById('edit-dish-search')?.value?.toLowerCase() || '';
   const grid = document.getElementById('edit-add-dish-results');
+  if (!grid) return;
   let filtered = state.menu.filter(d => {
     const matchName = d.name.toLowerCase().includes(search);
     const matchCat = editDishCategoryFilter === 'all' || d.cat === editDishCategoryFilter;
@@ -906,8 +910,10 @@ function deleteOrder(id) {
 function renderKitchen() {
   const filter = document.getElementById('kitchen-filter').value;
   let orders = state.orders.filter(o => (o.status === 'pending' || o.status === 'preparing') && (o.status === filter || !filter));
+  // Orden ascendente (más antiguo primero) para priorizar
   orders.sort((a, b) => {
     const timeToMinutes = (t) => {
+      if (!t) return 0;
       const parts = t.split(':');
       return parseInt(parts[0])*60 + parseInt(parts[1]);
     };
@@ -1162,6 +1168,7 @@ function renderAdminVentas() {
 
   tod.sort((a,b) => {
     const timeToMinutes = (t) => {
+      if (!t) return 0;
       const parts = t.split(':');
       return parseInt(parts[0])*60 + parseInt(parts[1]);
     };
@@ -2061,6 +2068,7 @@ function renderCajaMisPedidos() {
   const misPedidos = state.orders.filter(o => o.waiter_id === state.currentUser?.id);
   misPedidos.sort((a, b) => {
     const timeToMinutes = (t) => {
+      if (!t) return 0;
       const parts = t.split(':');
       return parseInt(parts[0])*60 + parseInt(parts[1]);
     };
@@ -2288,6 +2296,7 @@ function renderCajaVentas() {
   
   tod.sort((a,b) => {
     const timeToMinutes = (t) => {
+      if (!t) return 0;
       const parts = t.split(':');
       return parseInt(parts[0])*60 + parseInt(parts[1]);
     };
@@ -2356,6 +2365,7 @@ function renderCajaHistory() {
     const dateB = b.date.split('/').reverse().join('-');
     if (dateA !== dateB) return dateB.localeCompare(dateA);
     const timeToMinutes = (t) => {
+      if (!t) return 0;
       const parts = t.split(':');
       return parseInt(parts[0])*60 + parseInt(parts[1]);
     };
@@ -2388,6 +2398,7 @@ function renderHistorial() {
     const dateB = b.date.split('/').reverse().join('-');
     if (dateA !== dateB) return dateB.localeCompare(dateA);
     const timeToMinutes = (t) => {
+      if (!t) return 0;
       const parts = t.split(':');
       return parseInt(parts[0])*60 + parseInt(parts[1]);
     };
@@ -2583,6 +2594,14 @@ if (typeof window !== 'undefined') {
   window.deleteOrder = deleteOrder;
   window.updateEditItemQtyByIndex = updateEditItemQtyByIndex;
   window.removeEditItemByIndex = removeEditItemByIndex;
+  window.openEditAddDishModal = openEditAddDishModal;
+  window.selectEditTable = selectEditTable;
+  window.renderEditTableGrid = renderEditTableGrid;
+  window.renderEditOrderItems = renderEditOrderItems;
+  window.populateEditDishCategories = populateEditDishCategories;
+  window.filterEditDishMenu = filterEditDishMenu;
+  window.renderEditDishMenu = renderEditDishMenu;
+  window.addDishToEditOrder = addDishToEditOrder;
   // Caja
   window.renderCajaPedido = renderCajaPedido;
   window.selectCajaTable = selectCajaTable;
