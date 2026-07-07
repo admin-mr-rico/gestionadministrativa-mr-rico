@@ -47,7 +47,10 @@ const state = {
   currentOrder: [],
   selectedTable: null,
   menuCategories: [],
-  activityLog: []
+  activityLog: [],
+  expandedMenuCategories: {},
+  editingCategoryIndex: null,
+  managingCategoryDishesIndex: null
 };
 let adminInvCategorySelected = '__categories__';
 let kitchenInvCategorySelected = '__categories__';
@@ -56,6 +59,8 @@ let kitchenInvSubcatSelected = '__subcats__';
 let meseroCategorySelected = '__categories__';
 let adminMenuCategorySelected = '__categories__';
 let adminMenuSubcatSelected = '__subcats__';
+let cajaCategorySelected = 'all';
+if (typeof window.cajaOrder === 'undefined') window.cajaOrder = { currentOrder: [], selectedTable: null };
 
 // Guardamos una copia de los usuarios y del menú por defecto para fallback local
 const DEFAULT_USERS = state.users.map(u => ({ ...u }));
@@ -73,7 +78,6 @@ const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || window.env?.SUPABASE_ANON_
 
 if (SUPABASE_URL && SUPABASE_ANON_KEY) {
   try {
-    // Usamos window.supabase para asegurarnos de llamar a la librería de la CDN
     supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     initSupabase();
     console.log("¡Supabase configurado correctamente!");
@@ -103,8 +107,6 @@ async function loadInitialState() {
       loadCategories(),
       loadMenuCategories()
     ]);
-
-    // Hacemos sembrado inicial (seed) sólo de lo que falte en Supabase
     await checkAndSeedDatabase();
   } catch (e) {
     console.error('Error loading initial state from Supabase', e);
@@ -168,7 +170,6 @@ async function loadOrders() {
 
 async function loadActivityLog() {
   if (!supabaseClient) return;
-  // Traer los 100 más recientes
   const { data, error } = await supabaseClient.from('activity_log').select('*').order('id', { ascending: false }).limit(100);
   if (error) console.error("Error loading activity log:", error);
   else if (data) {
@@ -197,27 +198,22 @@ async function loadMenuCategories() {
 async function checkAndSeedDatabase() {
   if (!supabaseClient) return;
   try {
-    // 1. Menu
     const { data: remoteMenu } = await supabaseClient.from('menu').select('id');
     if (remoteMenu && remoteMenu.length === 0 && state.menu.length > 0) {
       await supabaseClient.from('menu').insert(state.menu);
     }
-    // 2. Inventory
     const { data: remoteInventory } = await supabaseClient.from('inventory').select('id');
     if (remoteInventory && remoteInventory.length === 0 && state.inventory.length > 0) {
       await supabaseClient.from('inventory').insert(state.inventory);
     }
-    // 3. Users
     const { data: remoteUsers } = await supabaseClient.from('users').select('id');
     if (remoteUsers && remoteUsers.length === 0 && state.users.length > 0) {
       await supabaseClient.from('users').insert(state.users);
     }
-    // 4. Tables
     const { data: remoteTables } = await supabaseClient.from('tables').select('id');
     if (remoteTables && remoteTables.length === 0 && state.tables.length > 0) {
       await supabaseClient.from('tables').insert(state.tables);
     }
-    // 5. Categories
     const { data: remoteCats } = await supabaseClient.from('categories').select('id');
     if (remoteCats && remoteCats.length === 0 && state.categories.length > 0) {
       await supabaseClient.from('categories').insert(state.categories.map(name => ({ name })));
@@ -226,7 +222,6 @@ async function checkAndSeedDatabase() {
     console.error("Error seeding database:", e);
   }
 }
-
 
 // ═══════════════════════════════════════════
 //  LOGIN / LOGOUT
@@ -250,9 +245,6 @@ function doLogin() {
     user = state.users.find(x => x.role === selectedRole && x.username === u && x.pass === p);
   }
 
-  // Fallback: si el usuario no existe en `state.users` (por ejemplo la carga desde Supabase
-  // devolvió esquemas distintos o contraseñas distintas), intentamos con los usuarios por defecto
-  // embebidos en la app (`DEFAULT_USERS`). Si encontramos match, lo añadimos a `state.users`.
   if (!user) {
     const fb = DEFAULT_USERS.find(x => x.role === selectedRole && x.username === u && x.pass === p);
     if (fb) {
@@ -316,7 +308,7 @@ function doLogout() {
 }
 
 function attemptRestoreSession() {
-  if (state.currentUser) return; // ya hay sesión activa (login manual o restauración previa)
+  if (state.currentUser) return;
   restoreSession();
 }
 
@@ -334,7 +326,7 @@ function activateScreen(role) {
     populateMeseroCat();
     renderMenuCards();
     renderPickupAlerts();
-    renderMeseroPedidos(); // Nueva función para ver sus pedidos
+    renderMeseroPedidos();
   } else if (role === 'cocina') {
     document.getElementById('screen-cocina').classList.add('active');
     renderKitchen();
@@ -386,11 +378,10 @@ function markDelivered(id) {
     }
   }
   renderPickupAlerts();
-  renderMeseroPedidos(); // actualizar lista de pedidos
+  renderMeseroPedidos();
   showToast(`✅ Pedido #${id} entregado`, 'success');
 }
 
-// Auto refresh for mesero pickup alerts
 setInterval(() => { if (state.currentUser?.role === 'mesero') { renderPickupAlerts(); renderMeseroPedidos(); } }, 10000);
 
 // ═══════════════════════════════════════════
@@ -430,7 +421,6 @@ function renderMenuCards() {
   const search = (document.getElementById('mesero-search')?.value||'').toLowerCase().trim();
   const grid = document.getElementById('menu-cards-grid');
 
-  // Si hay una búsqueda activa, buscamos en todo el menú sin importar la carpeta actual
   if (search) {
     const filtered = state.menu.filter(d => d.name.toLowerCase().includes(search) || (d.desc||'').toLowerCase().includes(search));
     if (!filtered.length) {
@@ -441,7 +431,6 @@ function renderMenuCards() {
     return;
   }
 
-  // Vista de carpetas por categoría (por defecto), para no tener que hacer scroll entre todos los platos
   if (meseroCategorySelected === '__categories__') {
     if (!state.categories.length) {
       grid.innerHTML=`<div class="empty-state" style="grid-column:1/-1;"><div class="icon">📁</div><p>No hay categorías</p></div>`;
@@ -493,10 +482,8 @@ function menuCardHTML(d, forOrder=false) {
 function addToOrder(id) {
   const d = state.menu.find(x=>x.id===id);
   if (!d||d.qty===0) return;
-  // Si es michelada, preguntar variante
   let variant = null;
   if (d.name.toLowerCase().includes('michelada')) {
-    // Mostrar un selector modal o prompt
     const choice = confirm('¿Ginger? (Aceptar = Ginger, Cancelar = Soda)');
     variant = choice ? 'Ginger' : 'Soda';
   }
@@ -601,20 +588,14 @@ async function sendOrder() {
   renderMenuCards();
   playAlertSound('kitchen');
 
-  // Enviar directamente a la base de datos en la nube
   if (supabaseClient) {
-    const { error } = await supabaseClient
-      .from('orders')
-      .insert([orderForDb]);
-
+    const { error } = await supabaseClient.from('orders').insert([orderForDb]);
     if (error) {
       console.error("Error al guardar en Supabase:", error.message);
       showToast('⚠️ Error al sincronizar pedido en la nube', 'error');
     } else {
       showToast('✅ ¡Pedido enviado a cocina en tiempo real!', 'success');
       logActivity(state.currentUser.name,'mesero',`Creó pedido #${order.id} – ${order.table_name} ($${order.total.toLocaleString()})`,'#FF6B1A');
-      
-      // Actualizar el stock de los platos en Supabase de forma inmediata
       order.items.forEach(oi => {
         const d = state.menu.find(x => x.id === oi.id);
         if (d) {
@@ -660,11 +641,9 @@ function renderMeseroPedidos() {
 function openEditOrderModal(orderId) {
   const order = state.orders.find(o => o.id === orderId);
   if (!order) return;
-  // Cargar los datos en el panel de edición (usamos un modal)
   document.getElementById('edit-order-id').value = order.id;
   document.getElementById('edit-order-table').value = order.table;
   document.getElementById('edit-order-notes').value = order.notes || '';
-  // Cargar items en el contenedor
   const container = document.getElementById('edit-order-items');
   container.innerHTML = order.items.map((item, idx) => `
     <div class="edit-order-item" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
@@ -673,7 +652,6 @@ function openEditOrderModal(orderId) {
       <button class="btn-sm btn-delete" onclick="removeEditItem(${orderId}, ${idx})">✕</button>
     </div>
   `).join('');
-  // Mostrar el modal
   document.getElementById('edit-order-modal').classList.add('open');
 }
 
@@ -687,14 +665,11 @@ function updateEditItemQty(orderId, input) {
   } else {
     order.items[idx].qty = newQty;
   }
-  // Recalcular total
   order.total = order.items.reduce((sum, i) => sum + (i.price || 0) * i.qty, 0);
-  // Actualizar en Supabase
   if (supabaseClient) {
     supabaseClient.from('orders').update({ items: order.items, total: order.total }).eq('id', orderId)
       .then(({ error }) => { if (error) console.error(error); });
   }
-  // Refrescar la vista de edición
   openEditOrderModal(orderId);
   renderMeseroPedidos();
   renderPickupAlerts();
@@ -705,7 +680,6 @@ function removeEditItem(orderId, idx) {
   if (!order) return;
   order.items.splice(idx, 1);
   if (order.items.length === 0) {
-    // Si no quedan items, eliminar el pedido
     deleteOrder(orderId);
     closeModal('edit-order-modal');
     return;
@@ -729,7 +703,6 @@ function saveEditOrder() {
   order.table = newTable;
   order.table_name = newTable;
   order.notes = newNotes;
-  // Recalcular total (ya se actualizó con cambios de qty)
   if (supabaseClient) {
     supabaseClient.from('orders').update({ table_name: newTable, notes: newNotes, total: order.total }).eq('id', id)
       .then(({ error }) => { if (error) console.error(error); });
@@ -757,12 +730,9 @@ function deleteOrder(id) {
 //  COCINA
 // ═══════════════════════════════════════════
 function renderKitchen() {
-  // Mostrar solo pedidos pending y preparing, ordenados por hora ascendente (los más antiguos primero)
   const filter = document.getElementById('kitchen-filter').value;
   let orders = state.orders.filter(o => (o.status === 'pending' || o.status === 'preparing') && (o.status === filter || !filter));
-  // Ordenar por hora (time) de llegada
   orders.sort((a, b) => {
-    // Convertir tiempo a minutos para comparar
     const timeToMinutes = (t) => {
       const parts = t.split(':');
       return parseInt(parts[0])*60 + parseInt(parts[1]);
@@ -817,12 +787,8 @@ function setOrderStatus(id, status) {
   }
   showToast(status==='done'?'✅ Pedido listo – mesero notificado':'🔥 Preparando pedido', 'success');
 
-  // Guardar en Supabase de forma inmediata
   if (supabaseClient) {
-    supabaseClient
-      .from('orders')
-      .update({ status: status, inventoryupdated: o.inventoryupdated })
-      .eq('id', id)
+    supabaseClient.from('orders').update({ status: status, inventoryupdated: o.inventoryupdated }).eq('id', id)
       .then(({ error }) => { if (error) console.error("Error al actualizar estado en Supabase:", error); });
   }
 }
@@ -1052,7 +1018,7 @@ function renderAdminVentas() {
     </tr>`;
   }).join('');
 
-  // Agregar fila de total al final
+  // Total de ventas del día
   const totalRow = document.createElement('tr');
   totalRow.style.fontWeight = 'bold';
   totalRow.style.borderTop = '2px solid var(--gray-400)';
@@ -1175,7 +1141,6 @@ function renderInvGrid() {
   let items = state.inventory;
   if (adminInvCategorySelected !== 'all') items = state.inventory.filter(i=>i.cat===adminInvCategorySelected);
 
-  // Nivel de subcategorías: solo aparece dentro de una categoría específica (no en "Ver todo")
   const subcatNav = document.getElementById('inv-subcat-nav');
   if (adminInvCategorySelected !== 'all') {
     const subcats = [...new Set(items.map(i=>i.subcat).filter(Boolean))].sort();
@@ -1634,21 +1599,28 @@ function renderCatList() {
       </div>
     ` : '';
 
+    const isEditing = state.editingCategoryIndex === idx;
+    const catDisplay = isEditing
+      ? `<div style="display:flex;gap:8px;align-items:center;flex:1;">
+          <input class="form-control" id="edit-cat-input" value="${cat}" style="flex:1;">
+          <button class="btn-sm btn-primary" onclick="saveCategoryEdit(${idx})">Guardar</button>
+          <button class="btn-sm btn-secondary" onclick="cancelCategoryEdit()">Cancelar</button>
+        </div>`
+      : `<div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:16px;font-weight:700;">📁 ${cat}</span>
+          <span style="font-size:11px;color:var(--gray-400);">(${subcats.length} subcategorías)</span>
+        </div>`;
+
     return `
     <div style="padding:12px 0;border-bottom:1px solid var(--gray-100);">
       <div style="display:flex;justify-content:space-between;align-items:center;">
-        <div style="flex:1;">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <span style="font-size:16px;font-weight:700;">📁 ${cat}</span>
-            <span style="font-size:11px;color:var(--gray-400);">(${subcats.length} subcategorías)</span>
-          </div>
-        </div>
+        <div style="flex:1;">${catDisplay}</div>
         <div style="display:flex;gap:6px;">
           <button class="btn-sm btn-blue" onclick="toggleMenuCategorySubcats('${cat}')">
             ${showSubcats ? '📂 Ocultar' : '📂 Ver'} subcategorías
           </button>
-          <button class="btn-sm btn-edit" onclick="startEditMenuCategory(${idx})">✏️ Editar</button>
-          <button class="btn-sm btn-delete" onclick="deleteMenuCategory(${idx})">🗑️</button>
+          ${!isEditing ? `<button class="btn-sm btn-edit" onclick="startEditMenuCategory(${idx})">✏️ Editar</button>` : ''}
+          <button class="btn-sm btn-delete" onclick="deleteCategory(${idx})">🗑️</button>
         </div>
       </div>
       ${subcatsHtml}
@@ -1703,8 +1675,8 @@ function deleteSubcategory(parentCat, subcat) {
   }
 }
 
-function startEditMenuCategory(i) {
-  state.editingCategoryIndex = i;
+function startEditMenuCategory(idx) {
+  state.editingCategoryIndex = idx;
   renderCatList();
 }
 
@@ -1713,56 +1685,14 @@ function cancelCategoryEdit() {
   renderCatList();
 }
 
-function toggleCategoryDishes(i) {
-  state.managingCategoryDishesIndex = state.managingCategoryDishesIndex === i ? null : i;
-  renderCatList();
-}
-
-function saveCategoryDishes(i) {
-  const catName = state.categories[i];
-  const checks = document.querySelectorAll('#cat-list .cat-dish-check');
-  const checkedIds = new Set([...checks].filter(c=>c.checked).map(c=>parseInt(c.dataset.dishId)));
-  let changed = 0;
-  state.menu.forEach(d => {
-    const shouldBeInCat = checkedIds.has(d.id);
-    const isInCat = d.cat === catName;
-    if (shouldBeInCat && !isInCat) {
-      d.cat = catName;
-      changed++;
-      if (supabaseClient) supabaseClient.from('menu').update({ cat: catName }).eq('id', d.id).then(({error})=>{ if(error) console.error(error); });
-    } else if (!shouldBeInCat && isInCat) {
-      d.cat = '';
-      changed++;
-      if (supabaseClient) supabaseClient.from('menu').update({ cat: '' }).eq('id', d.id).then(({error})=>{ if(error) console.error(error); });
-    }
-  });
-  state.managingCategoryDishesIndex = null;
-  renderCatList();
-  renderAdminMenu();
-  populateMeseroCat();
-  renderMenuCards();
-  showToast(changed ? `✅ ${changed} plato(s) actualizados` : 'Sin cambios', 'success');
-}
-
-function startEditCategory(i) {
-  startEditMenuCategory(i);
-}
-
-function cancelCategoryEdit() {
-  state.editingCategoryIndex = null;
-  renderCatList();
-}
-
-function saveCategoryEdit(i) {
+function saveCategoryEdit(idx) {
   const val = document.getElementById('edit-cat-input').value.trim();
   if (!val) { showToast('⚠️ La categoría no puede quedar vacía','error'); return; }
-  if (state.categories.includes(val) && state.categories[i] !== val) { showToast('Ya existe esa categoría','error'); return; }
-  const oldVal = state.categories[i];
-  state.categories[i] = val;
+  if (state.categories.includes(val) && state.categories[idx] !== val) { showToast('Ya existe esa categoría','error'); return; }
+  const oldVal = state.categories[idx];
+  state.categories[idx] = val;
   state.editingCategoryIndex = null;
-  // Los platos que pertenecían a la categoría vieja pasan a usar el nuevo nombre
   state.menu.forEach(d => { if (d.cat === oldVal) d.cat = val; });
-  // Las subcategorías heredan el nuevo nombre
   state.menuCategories.forEach(mc => { if (mc.parent_cat === oldVal) mc.parent_cat = val; });
   
   renderCatList();
@@ -1799,10 +1729,10 @@ function addCategory() {
   }
 }
 
-function deleteCategory(i) {
-  const cat = state.categories[i];
+function deleteCategory(idx) {
+  const cat = state.categories[idx];
   if (!confirm(`¿Eliminar categoría "${cat}"? Los platos en ella seguirán existiendo pero sin categoría.`)) return;
-  state.categories.splice(i, 1);
+  state.categories.splice(idx, 1);
   state.menu.forEach(d => { if (d.cat === cat) { d.cat = ''; d.subcat = null; } });
   state.menuCategories = state.menuCategories.filter(mc => mc.parent_cat !== cat);
   renderCatList();
@@ -1834,21 +1764,6 @@ function renderDishSubcatSelect() {
   const selectedCat = catInput?.value || '';
   const subcats = selectedCat ? state.menuCategories.filter(mc => mc.parent_cat === selectedCat).map(mc => mc.subcat) : [];
   subcatInput.innerHTML = `<option value="">Sin subcategoría</option>` + subcats.map(s => `<option>${s}</option>`).join('');
-}
-
-function startEditMenuCategory(i) {
-  const cat = state.categories[i];
-  const input = document.createElement('input');
-  input.className = 'form-control';
-  input.id = 'edit-cat-input';
-  input.value = cat;
-  // This is handled by renderCatList now
-  state.editingCategoryIndex = i;
-  renderCatList();
-}
-
-function startEditCategory(i) {
-  startEditMenuCategory(i);
 }
 
 function renderConsumesModal(consumes) {
@@ -1889,12 +1804,9 @@ function cajaTab(tab, btn) {
   if (tab==='pedido') renderCajaPedido();
 }
 
-// Función para renderizar el panel de pedido en caja
 function renderCajaPedido() {
-  // Reutilizamos la misma lógica que el mesero pero con un contenedor específico
   const container = document.getElementById('caja-pedido-container');
   if (!container) return;
-  // Copiamos el HTML del mesero pero adaptado
   container.innerHTML = `
     <div class="header-bar">
       <div>
@@ -1944,7 +1856,6 @@ function renderCajaPedido() {
       </div>
     </div>
   `;
-  // Inicializar el estado de pedido de caja (usamos variables globales)
   if (!window.cajaOrder) window.cajaOrder = { currentOrder: [], selectedTable: null };
   renderCajaTableBtns();
   populateCajaCat();
@@ -1968,11 +1879,10 @@ function selectCajaTable(id, name) {
 function populateCajaCat() {
   const nav = document.getElementById('caja-cat-nav');
   if (!nav) return;
-  nav.innerHTML = `<button class="btn-sm" onclick="selectCajaCategory('all')">Ver todo</button>` +
-    state.categories.map(c=>`<button class="btn-sm" onclick="selectCajaCategory('${c}')">${c}</button>`).join('');
+  nav.innerHTML = `<button class="btn-sm ${cajaCategorySelected==='all'?'btn-primary':''}" onclick="selectCajaCategory('all')">Ver todo</button>` +
+    state.categories.map(c=>`<button class="btn-sm ${cajaCategorySelected===c?'btn-primary':''}" onclick="selectCajaCategory('${c}')">${c}</button>`).join('');
 }
 
-let cajaCategorySelected = 'all';
 function selectCajaCategory(cat) {
   cajaCategorySelected = cat;
   renderCajaMenu();
@@ -1993,7 +1903,6 @@ function renderCajaMenu() {
   grid.innerHTML = filtered.map(d => menuCardHTML(d, true, 'caja')).join('');
 }
 
-// Sobrescribimos addToOrder para caja
 function addToCajaOrder(id) {
   const d = state.menu.find(x=>x.id===id);
   if (!d||d.qty===0) return;
@@ -2129,7 +2038,6 @@ async function sendCajaOrder() {
   } else {
     showToast('✅ Guardado localmente (Modo sin internet)', 'success');
   }
-  // Actualizar listas de pedidos en caja
   renderCajaVentas();
   renderCajaTables();
 }
@@ -2180,7 +2088,6 @@ function renderCajaVentas() {
     </tr>`;
   }).join('');
 
-  // Total de ventas al final
   const totalRow = document.createElement('tr');
   totalRow.style.fontWeight = 'bold';
   totalRow.style.borderTop = '2px solid var(--gray-400)';
@@ -2247,7 +2154,6 @@ function renderHistorial() {
       <td style="color:var(--gray-400);font-size:11px;">${o.date}<br>${o.time}</td>
     </tr>`).join('');
 
-  // Total de ventas del día al final del historial
   const today = new Date().toLocaleDateString('es-CO');
   const total = state.orders.filter(o=>o.date===today).reduce((s,o)=>s+o.total,0);
   const totalRow = document.createElement('tr');
@@ -2367,7 +2273,6 @@ function showToast(msg, type='') {
 //   INTEGRACIÓN FINAL: EXPOSICIÓN GLOBAL Y TIEMPO REAL
 // ============================================================================
 
-// 1. EXPOSICIÓN GLOBAL: Permite que los botones del HTML (onclick) encuentren las funciones del módulo
 if (typeof window !== 'undefined') {
   window.selectRole = selectRole;
   window.doLogin = doLogin;
@@ -2391,7 +2296,7 @@ if (typeof window !== 'undefined') {
   window.saveUser = saveUser;
   window.deleteUser = deleteUser;
   window.openCatModal = openCatModal;
-  window.startEditCategory = startEditCategory;
+  window.startEditCategory = startEditMenuCategory; // alias
   window.cancelCategoryEdit = cancelCategoryEdit;
   window.saveCategoryEdit = saveCategoryEdit;
   window.addCategory = addCategory;
@@ -2419,7 +2324,6 @@ if (typeof window !== 'undefined') {
   window.addSubcategory = addSubcategory;
   window.deleteSubcategory = deleteSubcategory;
   window.startEditMenuCategory = startEditMenuCategory;
-  window.deleteMenuCategory = deleteMenuCategory;
   window.closeModal = closeModal;
   window.addConsumeRow = addConsumeRow;
   // Nuevas funciones
@@ -2440,43 +2344,31 @@ if (typeof window !== 'undefined') {
   window.populateCajaCat = populateCajaCat;
 }
 
-// 2. LISTENERS REALTIME: Actualiza la pantalla de cada dispositivo en vivo sin recargar la página
+// 2. LISTENERS REALTIME
 function activarListenersTiempoReal() {
-  if (!supabaseClient) return; // Evita errores si Supabase no está conectado todavía
-
-  // Escuchar cambios en cualquier tabla del esquema público
+  if (!supabaseClient) return;
   supabaseClient
     .channel('db-changes')
-    .on(
-      'postgres_changes', 
-      { event: '*', schema: 'public' }, 
-      (payload) => {
-        const table = payload.table;
-        console.log(`¡Cambio en la tabla ${table} en la nube!`, payload);
-        
-        // Recargar de forma optimizada solo la tabla que cambió
-        let reloadPromise;
-        if (table === 'menu') reloadPromise = loadMenu();
-        else if (table === 'inventory') reloadPromise = loadInventory();
-        else if (table === 'users') reloadPromise = loadUsers();
-        else if (table === 'tables') reloadPromise = loadTables();
-        else if (table === 'orders') reloadPromise = loadOrders();
-        else if (table === 'activity_log') reloadPromise = loadActivityLog();
-        else if (table === 'categories') reloadPromise = loadCategories();
-        else return; // Tabla no rastreada
-
-        reloadPromise.then(() => {
-          refreshUIForTable(table);
-        });
-      }
-    )
+    .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
+      const table = payload.table;
+      console.log(`¡Cambio en la tabla ${table} en la nube!`, payload);
+      let reloadPromise;
+      if (table === 'menu') reloadPromise = loadMenu();
+      else if (table === 'inventory') reloadPromise = loadInventory();
+      else if (table === 'users') reloadPromise = loadUsers();
+      else if (table === 'tables') reloadPromise = loadTables();
+      else if (table === 'orders') reloadPromise = loadOrders();
+      else if (table === 'activity_log') reloadPromise = loadActivityLog();
+      else if (table === 'categories') reloadPromise = loadCategories();
+      else return;
+      reloadPromise.then(() => refreshUIForTable(table));
+    })
     .subscribe();
 }
 
 function refreshUIForTable(table) {
   if (!state.currentUser) return;
   const role = state.currentUser.role;
-
   if (table === 'orders') {
     if (role === 'mesero') {
       renderPickupAlerts();
@@ -2505,7 +2397,7 @@ function refreshUIForTable(table) {
       renderKitchenInventory();
     } else if (role === 'admin') {
       renderInvGrid();
-      renderAdminVentas(); // Para actualizar platos agotados/insumos bajos
+      renderAdminVentas();
     }
   } else if (table === 'tables') {
     if (role === 'mesero') {
@@ -2516,26 +2408,16 @@ function refreshUIForTable(table) {
       renderCajaTables();
     }
   } else if (table === 'users') {
-    if (role === 'admin') {
-      renderUsersGrid();
-    }
+    if (role === 'admin') renderUsersGrid();
   } else if (table === 'activity_log') {
-    if (role === 'admin') {
-      renderPersonnel();
-    }
+    if (role === 'admin') renderPersonnel();
   } else if (table === 'categories') {
     populateMeseroCat();
     renderDishCatSelect();
-    if (role === 'mesero') {
-      renderMenuCards();
-    } else if (role === 'admin') {
-      renderAdminMenu();
-    }
+    if (role === 'mesero') renderMenuCards();
+    else if (role === 'admin') renderAdminMenu();
   } else if (table === 'menu_categories') {
-    if (role === 'mesero') {
-      renderMenuCards();
-    } else if (role === 'admin') {
-      renderAdminMenu();
-    }
+    if (role === 'mesero') renderMenuCards();
+    else if (role === 'admin') renderAdminMenu();
   }
 }
