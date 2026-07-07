@@ -66,6 +66,23 @@ const DEFAULT_USERS = state.users.map(u => ({ ...u }));
 const DEFAULT_MENU = state.menu.map(d => ({ ...d }));
 
 // ──────────────────────────────────────────────────
+// Función global para convertir hora a minutos (maneja AM/PM)
+// ──────────────────────────────────────────────────
+function parseTimeToMinutes(timeStr) {
+  if (!timeStr) return 0;
+  const clean = timeStr.trim();
+  const isPM = clean.toLowerCase().includes('p.m.');
+  const isAM = clean.toLowerCase().includes('a.m.');
+  const match = clean.match(/(\d{1,2}):(\d{2})/);
+  if (!match) return 0;
+  let hours = parseInt(match[1]);
+  const minutes = parseInt(match[2]);
+  if (isPM && hours !== 12) hours += 12;
+  if (isAM && hours === 12) hours = 0;
+  return hours * 60 + minutes;
+}
+
+// ──────────────────────────────────────────────────
 // Supabase integration
 // ──────────────────────────────────────────────────
 let supabaseClient = null;
@@ -667,12 +684,7 @@ function renderMeseroPedidos() {
   const misPedidos = state.orders.filter(o => o.waiter_id === state.currentUser?.id);
   // Orden descendente (más reciente primero)
   misPedidos.sort((a, b) => {
-    const timeToMinutes = (t) => {
-      if (!t) return 0;
-      const parts = t.split(':');
-      return parseInt(parts[0])*60 + parseInt(parts[1]);
-    };
-    return timeToMinutes(b.time) - timeToMinutes(a.time);
+    return parseTimeToMinutes(b.time) - parseTimeToMinutes(a.time);
   });
   if (!misPedidos.length) {
     container.innerHTML = `<div class="empty-state" style="padding:20px 0;"><div class="icon">📋</div><p>No has creado pedidos</p></div>`;
@@ -912,12 +924,7 @@ function renderKitchen() {
   let orders = state.orders.filter(o => (o.status === 'pending' || o.status === 'preparing') && (o.status === filter || !filter));
   // Orden ascendente (más antiguo primero) para priorizar
   orders.sort((a, b) => {
-    const timeToMinutes = (t) => {
-      if (!t) return 0;
-      const parts = t.split(':');
-      return parseInt(parts[0])*60 + parseInt(parts[1]);
-    };
-    return timeToMinutes(a.time) - timeToMinutes(b.time);
+    return parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time);
   });
   document.getElementById('k-pending').textContent   = state.orders.filter(o=>o.status==='pending').length;
   document.getElementById('k-preparing').textContent = state.orders.filter(o=>o.status==='preparing').length;
@@ -1167,12 +1174,7 @@ function renderAdminVentas() {
   const sText={pending:'⏳ Pendiente',preparing:'🔥 Preparando',done:'✅ Listo'};
 
   tod.sort((a,b) => {
-    const timeToMinutes = (t) => {
-      if (!t) return 0;
-      const parts = t.split(':');
-      return parseInt(parts[0])*60 + parseInt(parts[1]);
-    };
-    return timeToMinutes(b.time) - timeToMinutes(a.time);
+    return parseTimeToMinutes(b.time) - parseTimeToMinutes(a.time);
   });
 
   tbody.innerHTML = tod.map(o=>{
@@ -2066,13 +2068,9 @@ function renderCajaMisPedidos() {
   const container = document.getElementById('caja-mis-pedidos');
   if (!container) return;
   const misPedidos = state.orders.filter(o => o.waiter_id === state.currentUser?.id);
+  // Orden descendente (más reciente primero)
   misPedidos.sort((a, b) => {
-    const timeToMinutes = (t) => {
-      if (!t) return 0;
-      const parts = t.split(':');
-      return parseInt(parts[0])*60 + parseInt(parts[1]);
-    };
-    return timeToMinutes(b.time) - timeToMinutes(a.time);
+    return parseTimeToMinutes(b.time) - parseTimeToMinutes(a.time);
   });
   if (!misPedidos.length) {
     container.innerHTML = `<div class="empty-state" style="padding:20px 0;"><div class="icon">📋</div><p>No has creado pedidos desde Caja</p></div>`;
@@ -2295,12 +2293,7 @@ function renderCajaVentas() {
   const sText={pending:'⏳ Pendiente',preparing:'🔥 Preparando',done:'✅ Listo'};
   
   tod.sort((a,b) => {
-    const timeToMinutes = (t) => {
-      if (!t) return 0;
-      const parts = t.split(':');
-      return parseInt(parts[0])*60 + parseInt(parts[1]);
-    };
-    return timeToMinutes(b.time) - timeToMinutes(a.time);
+    return parseTimeToMinutes(b.time) - parseTimeToMinutes(a.time);
   });
 
   tbody.innerHTML = tod.map(o=>{
@@ -2364,12 +2357,7 @@ function renderCajaHistory() {
     const dateA = a.date.split('/').reverse().join('-');
     const dateB = b.date.split('/').reverse().join('-');
     if (dateA !== dateB) return dateB.localeCompare(dateA);
-    const timeToMinutes = (t) => {
-      if (!t) return 0;
-      const parts = t.split(':');
-      return parseInt(parts[0])*60 + parseInt(parts[1]);
-    };
-    return timeToMinutes(b.time) - timeToMinutes(a.time);
+    return parseTimeToMinutes(b.time) - parseTimeToMinutes(a.time);
   });
   tbody.innerHTML = sorted.map(o=>`
     <tr>
@@ -2397,12 +2385,7 @@ function renderHistorial() {
     const dateA = a.date.split('/').reverse().join('-');
     const dateB = b.date.split('/').reverse().join('-');
     if (dateA !== dateB) return dateB.localeCompare(dateA);
-    const timeToMinutes = (t) => {
-      if (!t) return 0;
-      const parts = t.split(':');
-      return parseInt(parts[0])*60 + parseInt(parts[1]);
-    };
-    return timeToMinutes(b.time) - timeToMinutes(a.time);
+    return parseTimeToMinutes(b.time) - parseTimeToMinutes(a.time);
   });
   tbody.innerHTML = sorted.map(o=>`
     <tr>
