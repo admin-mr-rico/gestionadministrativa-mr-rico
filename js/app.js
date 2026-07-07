@@ -481,7 +481,7 @@ function menuCardHTML(d, forOrder=false, source='') {
 // ═══════════════════════════════════════════
 // Modal para elegir variante de michelada
 let pendingMicheladaDishId = null;
-let pendingMicheladaSource = null; // 'mesero' o 'caja'
+let pendingMicheladaSource = null; // 'mesero' o 'caja' o 'edit'
 
 function showMicheladaModal(dishId, source) {
   pendingMicheladaDishId = dishId;
@@ -489,12 +489,26 @@ function showMicheladaModal(dishId, source) {
   document.getElementById('michelada-modal').classList.add('open');
 }
 
+// ═══ FUNCIÓN ÚNICA Y CORREGIDA ═══
 function selectMicheladaVariant(variant) {
-  const d = state.menu.find(x=>x.id === pendingMicheladaDishId);
+  const d = state.menu.find(x => x.id === pendingMicheladaDishId);
   if (!d) return;
   const source = pendingMicheladaSource || 'mesero';
-  // Agregar al pedido correspondiente
-  if (source === 'caja') {
+  
+  if (source === 'edit') {
+    // Agregar al pedido en edición
+    if (!editOrderData) return;
+    const existing = editOrderData.items.find(i => i.id === d.id);
+    if (existing) {
+      existing.qty++;
+      existing.variant = variant;
+    } else {
+      editOrderData.items.push({ id: d.id, name: d.name, price: d.price, qty: 1, variant });
+    }
+    renderEditOrderItems();
+    closeModal('edit-add-dish-modal');
+    showToast(`✓ ${d.name} (${variant})`, 'success');
+  } else if (source === 'caja') {
     const order = window.cajaOrder;
     const ex = order.currentOrder.find(i=>i.id===d.id);
     if (ex) {
@@ -784,7 +798,7 @@ function removeEditItemByIndex(idx) {
 
 // ─── Agregar platos al pedido en edición ───
 function openEditAddDishModal() {
-  // Mostrar el modal de búsqueda de platos (reutilizamos un modal existente o creamos uno)
+  // Mostrar el modal de búsqueda de platos
   document.getElementById('edit-add-dish-modal').classList.add('open');
   // Cargar categorías y menú
   populateEditDishCategories();
@@ -832,10 +846,8 @@ function renderEditDishMenu() {
 function addDishToEditOrder(dishId) {
   const dish = state.menu.find(d => d.id === dishId);
   if (!dish) return;
-  // Si es michelada, preguntar variante
-  let variant = null;
+  // Si es michelada, mostrar modal de variante
   if (dish.name.toLowerCase().includes('michelada')) {
-    // Usar un modal pequeño o confirm (pero usaremos el modal de variante)
     showMicheladaModal(dishId, 'edit');
     return;
   }
@@ -850,55 +862,6 @@ function addDishToEditOrder(dishId) {
   // Cerrar el modal de agregar platos
   closeModal('edit-add-dish-modal');
   showToast(`✓ ${dish.name} agregado`, 'success');
-}
-
-// Sobrescribir la función global de michelada para que funcione con edición
-// (ya existe, pero debemos asegurar que maneje el caso 'edit')
-// Modificamos la función selectMicheladaVariant para que soporte 'edit'
-// La función original ya está, pero la ajustamos para que si el source es 'edit', agregue a editOrderData.
-
-// Reemplazar selectMicheladaVariant (ya existe, pero la sobrescribimos con esta versión mejorada)
-function selectMicheladaVariant(variant) {
-  const d = state.menu.find(x => x.id === pendingMicheladaDishId);
-  if (!d) return;
-  const source = pendingMicheladaSource || 'mesero';
-  
-  if (source === 'edit') {
-    // Agregar al pedido en edición
-    const existing = editOrderData.items.find(i => i.id === d.id);
-    if (existing) {
-      existing.qty++;
-      existing.variant = variant;
-    } else {
-      editOrderData.items.push({ id: d.id, name: d.name, price: d.price, qty: 1, variant });
-    }
-    renderEditOrderItems();
-    closeModal('edit-add-dish-modal');
-    showToast(`✓ ${d.name} (${variant})`, 'success');
-  } else if (source === 'caja') {
-    const order = window.cajaOrder;
-    const ex = order.currentOrder.find(i=>i.id===d.id);
-    if (ex) {
-      ex.qty++;
-      ex.variant = variant;
-    } else {
-      order.currentOrder.push({id:d.id, name:d.name, price:d.price, qty:1, variant});
-    }
-    renderCajaOrderPanel();
-    showToast(`✓ ${d.name} (${variant})`, 'success');
-  } else {
-    // mesero
-    const ex = state.currentOrder.find(i=>i.id===d.id);
-    if (ex) {
-      ex.qty++;
-      ex.variant = variant;
-    } else {
-      state.currentOrder.push({id:d.id, name:d.name, price:d.price, qty:1, variant});
-    }
-    renderOrderPanel();
-    showToast(`✓ ${d.name} (${variant})`, 'success');
-  }
-  closeModal('michelada-modal');
 }
 
 // Guardar cambios del pedido editado
