@@ -641,6 +641,21 @@
     </div>
   </div>
 
+  <!-- ══ MODAL MICHELADA ══ -->
+<div class="modal-overlay" id="michelada-modal">
+  <div class="modal" style="max-width:400px;text-align:center;">
+    <div class="modal-header">
+      <div class="modal-title">🍺 Elegir variante</div>
+      <button class="btn-close" onclick="closeModal('michelada-modal')">✕</button>
+    </div>
+    <p style="margin-bottom:20px;">¿Con qué deseas la michelada?</p>
+    <div style="display:flex;gap:12px;justify-content:center;">
+      <button class="btn-primary" style="width:auto;padding:12px 24px;" onclick="selectMicheladaVariant('Ginger')">🍺 Ginger</button>
+      <button class="btn-primary" style="width:auto;padding:12px 24px;" onclick="selectMicheladaVariant('Soda')">🥤 Soda</button>
+    </div>
+  </div>
+</div>
+
   <div class="toast" id="toast"></div>
 
   <!-- Supabase client -->

@@ -68,11 +68,9 @@ const DEFAULT_MENU = state.menu.map(d => ({ ...d }));
 
 // ──────────────────────────────────────────────────
 // Supabase integration (basic)
-// Deployment: 2026-06-14
 // ──────────────────────────────────────────────────
 let supabaseClient = null;
 
-// Leemos las variables directamente (de env.js o window.env en Vercel)
 const SUPABASE_URL = window.SUPABASE_URL || window.env?.SUPABASE_URL;
 const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || window.env?.SUPABASE_ANON_KEY;
 
@@ -457,12 +455,14 @@ function renderMenuCards() {
   grid.innerHTML = filtered.map(d => menuCardHTML(d, true)).join('');
 }
 
-function menuCardHTML(d, forOrder=false) {
+function menuCardHTML(d, forOrder=false, source='') {
   const sk = d.qty>5?'stock-ok':d.qty>0?'stock-low':'stock-out';
   const sl = d.qty>5?`${d.qty} disp.`:d.qty>0?`Solo ${d.qty}`:'Agotado';
   const dis = d.qty===0 ? 'style="opacity:.5;pointer-events:none;"' : '';
+  // Determinar qué función de agregar usar
+  const addFn = source === 'caja' ? `addToCajaOrder(${d.id})` : `addToOrder(${d.id})`;
   const actions = forOrder
-    ? `<button class="btn-sm btn-add-order" onclick="addToOrder(${d.id})">+ Agregar</button>`
+    ? `<button class="btn-sm btn-add-order" onclick="${addFn}">+ Agregar</button>`
     : `<button class="btn-sm btn-edit" onclick="openMenuModal(${d.id})">✏️ Editar</button><button class="btn-sm btn-delete" onclick="deleteDish(${d.id})">🗑️</button>`;
   return `<div class="menu-card" ${dis}>
     <div class="menu-card-img">${d.emoji||'🍽️'}</div>
@@ -479,20 +479,60 @@ function menuCardHTML(d, forOrder=false) {
 // ═══════════════════════════════════════════
 //  MESERO – ORDER
 // ═══════════════════════════════════════════
+// Modal para elegir variante de michelada
+let pendingMicheladaDishId = null;
+let pendingMicheladaSource = null; // 'mesero' o 'caja'
+
+function showMicheladaModal(dishId, source) {
+  pendingMicheladaDishId = dishId;
+  pendingMicheladaSource = source;
+  document.getElementById('michelada-modal').classList.add('open');
+}
+
+function selectMicheladaVariant(variant) {
+  const d = state.menu.find(x=>x.id === pendingMicheladaDishId);
+  if (!d) return;
+  const source = pendingMicheladaSource || 'mesero';
+  // Agregar al pedido correspondiente
+  if (source === 'caja') {
+    const order = window.cajaOrder;
+    const ex = order.currentOrder.find(i=>i.id===d.id);
+    if (ex) {
+      ex.qty++;
+      ex.variant = variant;
+    } else {
+      order.currentOrder.push({id:d.id, name:d.name, price:d.price, qty:1, variant});
+    }
+    renderCajaOrderPanel();
+    showToast(`✓ ${d.name} (${variant})`, 'success');
+  } else {
+    // mesero
+    const ex = state.currentOrder.find(i=>i.id===d.id);
+    if (ex) {
+      ex.qty++;
+      ex.variant = variant;
+    } else {
+      state.currentOrder.push({id:d.id, name:d.name, price:d.price, qty:1, variant});
+    }
+    renderOrderPanel();
+    showToast(`✓ ${d.name} (${variant})`, 'success');
+  }
+  closeModal('michelada-modal');
+}
+
 function addToOrder(id) {
   const d = state.menu.find(x=>x.id===id);
   if (!d||d.qty===0) return;
-  let variant = null;
+  // Si es michelada, mostrar modal en lugar de confirm
   if (d.name.toLowerCase().includes('michelada')) {
-    const choice = confirm('¿Ginger? (Aceptar = Ginger, Cancelar = Soda)');
-    variant = choice ? 'Ginger' : 'Soda';
+    showMicheladaModal(id, 'mesero');
+    return;
   }
   const ex = state.currentOrder.find(i=>i.id===id);
   if (ex) {
     ex.qty++;
-    if (variant) ex.variant = variant;
   } else {
-    state.currentOrder.push({id:d.id, name:d.name, price:d.price, qty:1, variant});
+    state.currentOrder.push({id:d.id, name:d.name, price:d.price, qty:1});
   }
   renderOrderPanel();
   showToast(`✓ ${d.name}`, 'success');
@@ -618,6 +658,14 @@ function renderMeseroPedidos() {
   const container = document.getElementById('mesero-pedidos-list');
   if (!container) return;
   const misPedidos = state.orders.filter(o => o.waiter_id === state.currentUser?.id);
+  // Ordenar por hora descendente (más reciente primero)
+  misPedidos.sort((a, b) => {
+    const timeToMinutes = (t) => {
+      const parts = t.split(':');
+      return parseInt(parts[0])*60 + parseInt(parts[1]);
+    };
+    return timeToMinutes(b.time) - timeToMinutes(a.time);
+  });
   if (!misPedidos.length) {
     container.innerHTML = `<div class="empty-state" style="padding:20px 0;"><div class="icon">📋</div><p>No has creado pedidos</p></div>`;
     return;
@@ -732,6 +780,7 @@ function deleteOrder(id) {
 function renderKitchen() {
   const filter = document.getElementById('kitchen-filter').value;
   let orders = state.orders.filter(o => (o.status === 'pending' || o.status === 'preparing') && (o.status === filter || !filter));
+  // Ordenar por hora ascendente (los más antiguos primero para priorizar)
   orders.sort((a, b) => {
     const timeToMinutes = (t) => {
       const parts = t.split(':');
@@ -986,7 +1035,16 @@ function renderAdminVentas() {
   const sColor={pending:'#FFF8E1',preparing:'#FFF0E8',done:'#E8F5E9'};
   const sText={pending:'⏳ Pendiente',preparing:'🔥 Preparando',done:'✅ Listo'};
 
-  tbody.innerHTML = [...tod].reverse().map(o=>{
+  // Ordenar por hora descendente (más reciente primero)
+  tod.sort((a,b) => {
+    const timeToMinutes = (t) => {
+      const parts = t.split(':');
+      return parseInt(parts[0])*60 + parseInt(parts[1]);
+    };
+    return timeToMinutes(b.time) - timeToMinutes(a.time);
+  });
+
+  tbody.innerHTML = tod.map(o=>{
     const itemsHtml = `<ul style="list-style:none;padding:0;margin:0;">${o.items.map(i=>{
       const unitPrice = i.price || (state.menu.find(m=>m.id===i.id)||{}).price || 0;
       const subtotal = unitPrice * i.qty;
@@ -1855,11 +1913,55 @@ function renderCajaPedido() {
         <button class="btn-send-order" onclick="sendCajaOrder()">📤 Enviar a Cocina</button>
       </div>
     </div>
+
+    <!-- MIS PEDIDOS (Caja) -->
+    <div style="margin-top:40px;">
+      <div class="header-bar">
+        <div>
+          <div class="screen-title" style="font-size:18px;">Mis Pedidos 📋</div>
+          <div class="screen-subtitle">Pedidos que has creado desde Caja</div>
+        </div>
+      </div>
+      <div id="caja-mis-pedidos"></div>
+    </div>
   `;
   if (!window.cajaOrder) window.cajaOrder = { currentOrder: [], selectedTable: null };
   renderCajaTableBtns();
   populateCajaCat();
   renderCajaMenu();
+  renderCajaMisPedidos();
+}
+
+function renderCajaMisPedidos() {
+  const container = document.getElementById('caja-mis-pedidos');
+  if (!container) return;
+  const misPedidos = state.orders.filter(o => o.waiter_id === state.currentUser?.id);
+  // Ordenar por hora descendente (más reciente primero)
+  misPedidos.sort((a, b) => {
+    const timeToMinutes = (t) => {
+      const parts = t.split(':');
+      return parseInt(parts[0])*60 + parseInt(parts[1]);
+    };
+    return timeToMinutes(b.time) - timeToMinutes(a.time);
+  });
+  if (!misPedidos.length) {
+    container.innerHTML = `<div class="empty-state" style="padding:20px 0;"><div class="icon">📋</div><p>No has creado pedidos desde Caja</p></div>`;
+    return;
+  }
+  container.innerHTML = misPedidos.map(o => `
+    <div class="order-item-card" style="display:flex;justify-content:space-between;align-items:center;padding:12px;border-bottom:1px solid var(--gray-100);">
+      <div>
+        <strong>#${o.id}</strong> · ${o.table} · ${o.time} · 
+        <span class="badge ${o.status==='done'?'badge-success':o.status==='preparing'?'badge-warning':'badge-secondary'}">${o.status}</span>
+        <span class="badge ${o.payment==='paid'?'badge-success':'badge-secondary'}">${o.payment}</span>
+        <div style="font-size:12px;color:var(--gray-400);">${o.items.map(i=>`${i.qty}× ${i.name}${i.variant?' ('+i.variant+')':''}`).join(', ')}</div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn-sm btn-edit" onclick="openEditOrderModal(${o.id})">✏️ Editar</button>
+        <button class="btn-sm btn-delete" onclick="deleteOrder(${o.id})">🗑️</button>
+      </div>
+    </div>
+  `).join('');
 }
 
 function renderCajaTableBtns() {
@@ -1906,18 +2008,17 @@ function renderCajaMenu() {
 function addToCajaOrder(id) {
   const d = state.menu.find(x=>x.id===id);
   if (!d||d.qty===0) return;
-  let variant = null;
+  // Si es michelada, mostrar modal
   if (d.name.toLowerCase().includes('michelada')) {
-    const choice = confirm('¿Ginger? (Aceptar = Ginger, Cancelar = Soda)');
-    variant = choice ? 'Ginger' : 'Soda';
+    showMicheladaModal(id, 'caja');
+    return;
   }
   const order = window.cajaOrder;
   const ex = order.currentOrder.find(i=>i.id===id);
   if (ex) {
     ex.qty++;
-    if (variant) ex.variant = variant;
   } else {
-    order.currentOrder.push({id:d.id, name:d.name, price:d.price, qty:1, variant});
+    order.currentOrder.push({id:d.id, name:d.name, price:d.price, qty:1});
   }
   renderCajaOrderPanel();
   showToast(`✓ ${d.name}`, 'success');
@@ -2040,6 +2141,7 @@ async function sendCajaOrder() {
   }
   renderCajaVentas();
   renderCajaTables();
+  renderCajaMisPedidos();
 }
 
 // ═══════════════════════════════════════════
@@ -2062,7 +2164,17 @@ function renderCajaVentas() {
   if (!tod.length) { tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;color:var(--gray-400);padding:32px;">Sin pedidos hoy</td></tr>`; return; }
   const sColor={pending:'#FFF8E1',preparing:'#FFF0E8',done:'#E8F5E9'};
   const sText={pending:'⏳ Pendiente',preparing:'🔥 Preparando',done:'✅ Listo'};
-  tbody.innerHTML=[...tod].reverse().map(o=>{
+  
+  // Ordenar por hora descendente
+  tod.sort((a,b) => {
+    const timeToMinutes = (t) => {
+      const parts = t.split(':');
+      return parseInt(parts[0])*60 + parseInt(parts[1]);
+    };
+    return timeToMinutes(b.time) - timeToMinutes(a.time);
+  });
+
+  tbody.innerHTML = tod.map(o=>{
     const itemsHtml = `<ul style="list-style:none;padding:0;margin:0;">${o.items.map(i=>{
       const unitPrice = i.price || (state.menu.find(m=>m.id===i.id)||{}).price || 0;
       const subtotal = unitPrice * i.qty;
@@ -2119,7 +2231,20 @@ function renderCajaHistory() {
   if (!state.orders.length) { tbody.innerHTML=`<tr><td colspan="9" style="text-align:center;color:var(--gray-400);padding:32px;">Sin pedidos</td></tr>`; return; }
   const sColor={pending:'#FFF8E1',preparing:'#FFF0E8',done:'#E8F5E9'};
   const sText={pending:'⏳ Pendiente',preparing:'🔥 Preparando',done:'✅ Listo'};
-  tbody.innerHTML=[...state.orders].reverse().map(o=>`
+  // Ordenar por fecha y hora descendente (más reciente primero)
+  const sorted = [...state.orders].sort((a,b) => {
+    // Primero por fecha (asumiendo formato DD/MM/YYYY)
+    const dateA = a.date.split('/').reverse().join('-');
+    const dateB = b.date.split('/').reverse().join('-');
+    if (dateA !== dateB) return dateB.localeCompare(dateA);
+    // Luego por hora
+    const timeToMinutes = (t) => {
+      const parts = t.split(':');
+      return parseInt(parts[0])*60 + parseInt(parts[1]);
+    };
+    return timeToMinutes(b.time) - timeToMinutes(a.time);
+  });
+  tbody.innerHTML = sorted.map(o=>`
     <tr>
       <td><strong>#${o.id}</strong></td>
       <td>${o.table}</td>
@@ -2141,7 +2266,18 @@ function renderHistorial() {
   if (!state.orders.length) { tbody.innerHTML=`<tr><td colspan="9" style="text-align:center;color:var(--gray-400);padding:32px;">Sin pedidos</td></tr>`; return; }
   const sColor={pending:'#FFF8E1',preparing:'#FFF0E8',done:'#E8F5E9'};
   const sText={pending:'⏳ Pendiente',preparing:'🔥 Preparando',done:'✅ Listo'};
-  tbody.innerHTML=[...state.orders].reverse().map(o=>`
+  // Ordenar por fecha y hora descendente
+  const sorted = [...state.orders].sort((a,b) => {
+    const dateA = a.date.split('/').reverse().join('-');
+    const dateB = b.date.split('/').reverse().join('-');
+    if (dateA !== dateB) return dateB.localeCompare(dateA);
+    const timeToMinutes = (t) => {
+      const parts = t.split(':');
+      return parseInt(parts[0])*60 + parseInt(parts[1]);
+    };
+    return timeToMinutes(b.time) - timeToMinutes(a.time);
+  });
+  tbody.innerHTML = sorted.map(o=>`
     <tr>
       <td><strong>#${o.id}</strong></td>
       <td>${o.table}</td>
@@ -2296,7 +2432,7 @@ if (typeof window !== 'undefined') {
   window.saveUser = saveUser;
   window.deleteUser = deleteUser;
   window.openCatModal = openCatModal;
-  window.startEditCategory = startEditMenuCategory; // alias
+  window.startEditCategory = startEditMenuCategory;
   window.cancelCategoryEdit = cancelCategoryEdit;
   window.saveCategoryEdit = saveCategoryEdit;
   window.addCategory = addCategory;
@@ -2312,8 +2448,6 @@ if (typeof window !== 'undefined') {
   window.selectKitchenInvCategory = selectKitchenInvCategory;
   window.selectKitchenInvSubcat = selectKitchenInvSubcat;
   window.selectMeseroCategory = selectMeseroCategory;
-  window.toggleCategoryDishes = toggleCategoryDishes;
-  window.saveCategoryDishes = saveCategoryDishes;
   window.resetEndOfDay = resetEndOfDay;
   window.renderKitchen = renderKitchen;
   window.renderAdminMenu = renderAdminMenu;
@@ -2326,13 +2460,14 @@ if (typeof window !== 'undefined') {
   window.startEditMenuCategory = startEditMenuCategory;
   window.closeModal = closeModal;
   window.addConsumeRow = addConsumeRow;
-  // Nuevas funciones
+  // Mesero
   window.renderMeseroPedidos = renderMeseroPedidos;
   window.openEditOrderModal = openEditOrderModal;
   window.saveEditOrder = saveEditOrder;
   window.deleteOrder = deleteOrder;
   window.updateEditItemQty = updateEditItemQty;
   window.removeEditItem = removeEditItem;
+  // Caja
   window.renderCajaPedido = renderCajaPedido;
   window.selectCajaTable = selectCajaTable;
   window.addToCajaOrder = addToCajaOrder;
@@ -2342,6 +2477,10 @@ if (typeof window !== 'undefined') {
   window.selectCajaCategory = selectCajaCategory;
   window.renderCajaMenu = renderCajaMenu;
   window.populateCajaCat = populateCajaCat;
+  window.renderCajaMisPedidos = renderCajaMisPedidos;
+  // Michelada modal
+  window.showMicheladaModal = showMicheladaModal;
+  window.selectMicheladaVariant = selectMicheladaVariant;
 }
 
 // 2. LISTENERS REALTIME
@@ -2385,6 +2524,7 @@ function refreshUIForTable(table) {
       renderCajaVentas();
       renderCajaTables();
       renderCajaHistory();
+      renderCajaMisPedidos();
     }
   } else if (table === 'menu') {
     if (role === 'mesero') {
