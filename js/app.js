@@ -704,8 +704,17 @@ let editOrderData = null;
 let editOrderSelectedTable = null;
 
 function openEditOrderModal(orderId) {
+  const modal = document.getElementById('edit-order-modal');
+  if (!modal) {
+    console.error('No se encontró el modal de edición (edit-order-modal) en el DOM');
+    showToast('Error: el modal de edición no está disponible', 'error');
+    return;
+  }
   const order = state.orders.find(o => o.id === orderId);
-  if (!order) return;
+  if (!order) {
+    showToast('Pedido no encontrado', 'error');
+    return;
+  }
   editOrderData = {
     ...order,
     items: order.items.map(item => ({ ...item })),
@@ -716,9 +725,12 @@ function openEditOrderModal(orderId) {
   document.getElementById('edit-order-notes').value = order.notes || '';
   renderEditTableGrid();
   renderEditOrderItems();
-  document.getElementById('edit-add-dish-results').innerHTML = '';
-  document.getElementById('edit-dish-search').value = '';
-  document.getElementById('edit-order-modal').classList.add('open');
+  // Limpiar resultados de búsqueda de platos
+  const results = document.getElementById('edit-add-dish-results');
+  if (results) results.innerHTML = '';
+  const search = document.getElementById('edit-dish-search');
+  if (search) search.value = '';
+  modal.classList.add('open');
 }
 
 function renderEditTableGrid() {
